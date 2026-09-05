@@ -110,6 +110,29 @@ class TestVoorstellingen(unittest.TestCase):
         self.assertEqual([x.ernst for x in m], [Ernst.WEBSITE])
 
 
+class TestOnbekendType(unittest.TestCase):
+    def test_onbekend_type_wordt_gemeld_in_plaats_van_stil_overgeslagen(self):
+        # "OVERSTA DAG" staat echt in de orkestlijst. Zo'n regel valt buiten
+        # elke vergelijking; dat mag hij, maar niet zonder het te zeggen.
+        m = vergelijk(
+            [v("orkest", date(2027, 2, 7), None, None, soort="OVERSTA DAG")],
+            leeg(), leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("OVERSTA DAG", m[0].tekst)
+        self.assertIs(m[0].ernst, Ernst.VERSCHIL)
+
+    def test_onbekend_type_op_jouw_naam_is_kritiek(self):
+        # Een typefout in de typekolom zou anders een voorstelling van Emiel
+        # geruisloos uit de controle laten verdwijnen.
+        m = vergelijk(
+            [v("orkest", date(2027, 2, 7), "20:00", "emiel", soort="REGG")],
+            leeg(), leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+        self.assertIn("REGG", m[0].tekst)
+
+
 class TestAgenda(unittest.TestCase):
     def test_speelbeurt_zonder_agenda_item_is_kritiek(self):
         m = vergelijk(
@@ -185,6 +208,38 @@ class TestAgenda(unittest.TestCase):
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("geen speelbeurt", m[0].tekst.lower())
+
+    def test_twee_shows_op_een_dag_pikken_elkaars_agenda_item_niet_in(self):
+        # Bij 14:00 en 18:00 overlappen de vensters van vier uur. Wie per beurt
+        # het dichtstbijzijnde item pakt, laat de matinee het item van de avond
+        # inpikken en meldt daarna twee dingen die allebei onwaar zijn.
+        m = vergelijk(
+            [v("orkest", date(2026, 11, 7), "14:00", "emiel"),
+             v("orkest", date(2026, 11, 7), "18:00", "emiel")],
+            [v("reed2", date(2026, 11, 7), "14:00", "emiel"),
+             v("reed2", date(2026, 11, 7), "18:00", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 11, 7), time(10, 5), "Cats matinee", "a"),
+             AgendaItem(date(2026, 11, 7), time(14, 15), "Cats avond", "b")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+    def test_ontbrekend_item_wijst_de_juiste_voorstelling_aan(self):
+        # Alleen een afspraak voor de avondvoorstelling. Dan moet de matinee
+        # als ontbrekend gemeld worden, niet de avond.
+        m = vergelijk(
+            [v("orkest", date(2027, 5, 21), "15:00", "emiel"),
+             v("orkest", date(2027, 5, 21), "19:45", "emiel")],
+            [v("reed2", date(2027, 5, 21), "15:00", "emiel"),
+             v("reed2", date(2027, 5, 21), "19:45", "emiel")],
+            leeg(),
+            [AgendaItem(date(2027, 5, 21), time(16, 0), "Cats avond", "b")],
+            INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("15:00", m[0].tekst)
+        self.assertIn("niets in je agenda", m[0].tekst)
 
     def test_agenda_item_zonder_trefwoord_wordt_genegeerd(self):
         m = vergelijk(

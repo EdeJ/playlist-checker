@@ -6,7 +6,7 @@ plaats van als één tijdsverschil.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 from catscheck.model import (
@@ -33,9 +33,42 @@ class Instellingen:
 def vergelijk(orkest, reed2, website, agenda, instellingen, vanaf):
     """Geef alle bevindingen terug, ongesorteerd."""
     meldingen = []
+    meldingen += _onbekende_types(orkest, reed2, instellingen, vanaf)
     meldingen += _vergelijk_bronnen(orkest, reed2, instellingen, vanaf)
     meldingen += _vergelijk_website(orkest, website, vanaf)
     meldingen += _vergelijk_agenda(orkest, reed2, agenda, instellingen, vanaf)
+    return meldingen
+
+
+# --- regels die we niet begrijpen ------------------------------------------
+
+BRONNAAM = {
+    "orkest": "de orkestlijst",
+    "reed2": "jullie reed 2-sheet",
+    "website": "musicalcats.nl",
+}
+
+
+def _onbekende_types(orkest, reed2, inst, vanaf):
+    """Meld regels met een type dat in geen enkele verzameling voorkomt.
+
+    Zo'n regel valt buiten elke vergelijking. Zonder deze melding laat een
+    typefout in de typekolom een hele voorstelling verdwijnen — inclusief een
+    naamverschil dat Emiel raakt. Liever een regel die je kunt negeren dan een
+    voorstelling die je nooit ziet.
+    """
+    bekend = SPEEL_TYPES | WERK_TYPES | NEGEER_TYPES
+    meldingen = []
+    for v in list(orkest) + list(reed2):
+        if v.datum < vanaf or v.type is None or v.type in bekend:
+            continue
+        meldingen.append(Melding(
+            Ernst.KRITIEK if v.reed2 == inst.mijn_naam else Ernst.VERSCHIL,
+            v.datum,
+            f"onbekend type {v.type!r} in {BRONNAAM.get(v.bron, v.bron)} — "
+            f"deze voorstelling is niet gecontroleerd",
+            (f"{v.bron}: {v.herkomst}",),
+        ))
     return meldingen
 
 
@@ -153,67 +186,111 @@ def _vergelijk_website(orkest, website, vanaf):
 
 def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
     meldingen = []
-    mijn = _mijn_speelbeurten(orkest, reed2, inst, vanaf)
-    cats_items = [
-        i for i in agenda
-        if i.datum >= vanaf
-        and any(t in i.titel.lower() for t in inst.trefwoorden)
-    ]
-    gebruikt = set()
+    beurten_per_dag = defaultdict(list)
+    for beurt in _mijn_speelbeurten(orkest, reed2, inst, vanaf):
+        beurten_per_dag[beurt.datum].append(beurt)
 
-    for beurt in mijn:
-        # Op de positie zoeken, niet op waarde: twee identieke agenda-items
-        # zouden anders naar dezelfde plek in de lijst wijzen.
-        zelfde_dag = [
-            (n, i) for n, i in enumerate(cats_items)
-            if n not in gebruikt and i.datum == beurt.datum
-        ]
-        kandidaten = [
-            (n, i) for n, i in zelfde_dag if _past_in_venster(i, beurt, inst)
-        ]
-        if kandidaten:
-            nummer, beste = min(kandidaten, key=lambda paar: _afstand(paar[1], beurt))
-            gebruikt.add(nummer)
-            if beste.start is None:
+    items_per_dag = defaultdict(list)
+    for item in agenda:
+        if item.datum >= vanaf and any(
+            t in item.titel.lower() for t in inst.trefwoorden
+        ):
+            items_per_dag[item.datum].append(item)
+    for dag in items_per_dag:
+        # Items zonder tijd achteraan: die zijn nergens op te sorteren.
+        items_per_dag[dag].sort(
+            key=lambda i: (i.start is None, i.start or time(0, 0))
+        )
+
+    for dag in sorted(set(beurten_per_dag) | set(items_per_dag)):
+        beurten = beurten_per_dag.get(dag, [])
+        items = items_per_dag.get(dag, [])
+        koppeling = _beste_koppeling(beurten, items, inst)
+        gekoppelde_beurten = {b for b, _ in koppeling}
+        vrij = [j for j in range(len(items)) if j not in {i for _, i in koppeling}]
+
+        for b, j in koppeling:
+            if items[j].start is None:
                 meldingen.append(Melding(
-                    Ernst.KRITIEK, beurt.datum,
+                    Ernst.KRITIEK, dag,
                     f"agenda-item duurt de hele dag, de tijd is dus niet te "
-                    f"controleren — {_omschrijf(beurt)}",
-                    (f"agenda: {beste.titel}",),
+                    f"controleren — {_omschrijf(beurten[b])}",
+                    (f"agenda: {items[j].titel}",),
                 ))
-        elif zelfde_dag:
-            # Er staat wel iets, maar op een tijd die niet kan kloppen. Dat is
-            # één melding over een verkeerde tijd. Zou het item hier blijven
-            # liggen, dan meldde de checker het twee keer: eerst als
-            # ontbrekende afspraak, daarna als afspraak zonder speelbeurt —
-            # allebei onwaar, want het item hoort juist bij deze voorstelling.
-            nummer, dichtstbij = min(
-                zelfde_dag, key=lambda paar: _afstand(paar[1], beurt)
-            )
-            gebruikt.add(nummer)
-            klok = (dichtstbij.start.strftime("%H:%M")
-                    if dichtstbij.start else "de hele dag")
-            meldingen.append(Melding(
-                Ernst.KRITIEK, beurt.datum,
-                f"agenda-item staat op {klok} maar de voorstelling begint om "
-                f"{beurt.tijd} — {_omschrijf(beurt)}",
-                (f"agenda: {dichtstbij.titel}",),
-            ))
-        else:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, beurt.datum,
-                f"jij staat ingeroosterd maar er staat niets in je agenda — "
-                f"{_omschrijf(beurt)}",
-            ))
 
-    for n, item in enumerate(cats_items):
-        if n not in gebruikt:
+        for b, beurt in enumerate(beurten):
+            if b in gekoppelde_beurten:
+                continue
+            if vrij:
+                # Er staat wel iets die dag, maar op een tijd die niet kan
+                # kloppen. Dat is één melding over een verkeerde tijd — niet
+                # een ontbrekende plus een overtollige afspraak, want die
+                # zouden allebei het tegendeel beweren van wat er aan de hand is.
+                j = min(vrij, key=lambda k: _afstand(items[k], beurt))
+                vrij.remove(j)
+                klok = (items[j].start.strftime("%H:%M")
+                        if items[j].start else "de hele dag")
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"agenda-item staat op {klok} maar de voorstelling begint "
+                    f"om {beurt.tijd} — {_omschrijf(beurt)}",
+                    (f"agenda: {items[j].titel}",),
+                ))
+            else:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"jij staat ingeroosterd maar er staat niets in je agenda — "
+                    f"{_omschrijf(beurt)}",
+                ))
+
+        for j in vrij:
             meldingen.append(Melding(
-                Ernst.KRITIEK, item.datum,
-                f"agenda-item {item.titel!r} hoort bij geen speelbeurt van jou",
-                (f"start {item.start.strftime('%H:%M') if item.start else 'hele dag'}",),
+                Ernst.KRITIEK, dag,
+                f"agenda-item {items[j].titel!r} hoort bij geen speelbeurt van jou",
+                (f"start {items[j].start.strftime('%H:%M') if items[j].start else 'hele dag'}",),
             ))
     return meldingen
+
+
+def _beste_koppeling(beurten, items, inst):
+    """Koppel de agenda-items van één dag aan de speelbeurten van die dag.
+
+    Geeft een lijst (index_beurt, index_item) terug. Gezocht wordt naar de
+    toewijzing die de meeste beurten binnen hun venster koppelt, en bij
+    gelijke stand naar die met de kleinste totale afwijking.
+
+    Per beurt greedy het dichtstbijzijnde item pakken gaat mis zodra twee
+    vensters elkaar overlappen: de vroegste beurt pikt dan het item in dat bij
+    de latere hoort, waarna er twee meldingen ontstaan die allebei onjuist
+    zijn. Een speeldag telt hooguit een handvol voorstellingen, dus alle
+    varianten aflopen kost niets.
+    """
+    mogelijk = [
+        [j for j in range(len(items)) if _past_in_venster(items[j], beurt, inst)]
+        for beurt in beurten
+    ]
+    beste = []
+    beste_score = None
+
+    def zoek(b, gekozen, bezet, afstand):
+        nonlocal beste, beste_score
+        if b == len(beurten):
+            score = (-len(gekozen), afstand)
+            if beste_score is None or score < beste_score:
+                beste_score, beste = score, list(gekozen)
+            return
+        for j in mogelijk[b]:
+            if j in bezet:
+                continue
+            gekozen.append((b, j))
+            zoek(b + 1, gekozen, bezet | {j},
+                 afstand + _afstand(items[j], beurten[b]))
+            gekozen.pop()
+        # Deze beurt zonder item laten is ook een mogelijkheid.
+        zoek(b + 1, gekozen, bezet, afstand)
+
+    zoek(0, [], frozenset(), timedelta())
+    return beste
 
 
 def _mijn_speelbeurten(orkest, reed2, inst, vanaf):
