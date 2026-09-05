@@ -1015,8 +1015,11 @@ _RIJ = re.compile(
 _SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
 
 # Hoeveel datumcellen er in de tabel staan. Wijkt dat af van het aantal
-# gelezen rijen, dan is de pagina maar half begrepen.
-_DATUMCEL = re.compile(r'<td class="date"', re.I)
+# gelezen rijen, dan is de pagina maar half begrepen. Bewust soepeler dan
+# _RIJ hierboven: die eist class="date" als eerste attribuut, deze niet. Zou
+# de teller even streng zijn als de noemer, dan telt een onleesbare rij aan
+# beide kanten weg en meldt de vlag altijd "volledig".
+_DATUMCEL = re.compile(r'<td[^>]*?class="date"', re.I)
 
 
 def parse_website(html):
