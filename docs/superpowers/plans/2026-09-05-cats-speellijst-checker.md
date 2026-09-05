@@ -2358,18 +2358,29 @@ Verwacht: PASS, 78 tests, geen fouten.
 
 - [ ] **Stap 7: Draai op de echte bronnen**
 
-Met `cache/orkest.txt`, `cache/reed2.csv` en `cache/website.html` uit de vorige
-taken en een lege `cache/agenda.ics`:
+Alle vier de cachebestanden staan er al, inclusief een echte
+`cache/agenda.ics`. **Overschrijf die niet** — het is een opgehaalde kopie van
+een privéagenda en er staat geen tweede exemplaar van.
 
 ```bash
-printf 'BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR\n' > cache/agenda.ics
 python3 -m catscheck --vanaf 2026-09-01
 ```
 
-Verwacht: een rapport dat onder VERSCHIL de tijdsverschillen op 11, 18, 24 en
-25 oktober noemt, onder WEBSITE de plaatsverschillen rond 20 tot en met 23 mei
-2027 (orkestlijst Den Bosch, site Den Haag) en de ontbrekende DeLaMar-reeks, en
-onder KRITIEK alle speelbeurten van Emiel omdat de agenda nog leeg is.
+Verwacht, op grond van wat er eerder handmatig in de bronnen is nagekeken:
+
+- onder VERSCHIL de tijdsverschillen tussen orkestlijst en reed 2-sheet op
+  11, 18, 24 en 25 oktober 2026;
+- onder WEBSITE het plaatsverschil rond 20 tot en met 23 mei 2027 (orkestlijst
+  Den Bosch, site Den Haag) en de DeLaMar-reeks die niet op de site staat;
+- onder KRITIEK drie speeldagen zonder Cats-afspraak in de agenda
+  (21-10-2026, 20-11-2026, 13-12-2026) en drie dagen met twee voorstellingen
+  waar één afspraak "Cats 2x" staat (7 en 14 november, 5 december);
+- onder NOG IN TE VULLEN ruim honderd lege Reed 2-cellen vanaf half december,
+  samengevat tot één regel in plaats van uitgeschreven.
+
+Wijkt het rapport hier sterk van af, meld dat dan — het betekent dat een van de
+onderdelen anders werkt dan bedoeld, niet dat de verwachting bijgesteld moet
+worden.
 
 - [ ] **Stap 8: Commit**
 
