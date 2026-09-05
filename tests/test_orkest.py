@@ -41,10 +41,15 @@ class TestParseOrkest(unittest.TestCase):
         self.assertIn(date(2027, 1, 2), datums)     # januari wordt 2027
         self.assertIn(date(2027, 3, 31), datums)    # maart blijft 2027
 
-    def test_tabblad_met_extra_kolom_wordt_gewoon_gelezen(self):
-        # Januari heeft een extra BIJZITTERS-kolom; Reed 2 moet nog kloppen.
+    def test_naam_in_de_reed1_kolom_wordt_niet_voor_reed2_aangezien(self):
+        # Januari heeft twee extra BIJZITTERS-kolommen achteraan, en Coen staat
+        # er in de Reed 1-kolom terwijl Reed 2 leeg is. Coen bespeelt beide
+        # stoelen, dus een parser die op een vaste kolompositie werkt in plaats
+        # van op de kopnaam pikt hem hier ten onrechte op als Reed 2.
         za2 = [v for v in self.vs if v.datum == date(2027, 1, 2)][0]
-        self.assertEqual(za2.reed2, "coen")
+        self.assertEqual(za2.tijd, "14:30")
+        self.assertEqual(za2.plaats, "BREDA")
+        self.assertIsNone(za2.reed2)
 
     def test_leeg_tussen_haakjes_in_een_andere_kolom_verstoort_niets(self):
         zo13 = [v for v in self.vs if v.datum == date(2026, 12, 13)][0]
