@@ -1308,7 +1308,7 @@ Het hart van het programma. Alle regels uit het spec komen hier samen.
 - Gebruikt: `Voorstelling`, `AgendaItem`, `Melding`, `Ernst`, `REED2_NAMEN`,
   `SPEEL_TYPES`, `WERK_TYPES`, `NEGEER_TYPES`
 - Levert:
-  - `Instellingen(marge_voor_minuten=180, marge_na_minuten=30, trefwoorden=("cats",), mijn_naam="emiel")`
+  - `Instellingen(marge_voor_minuten=240, marge_na_minuten=30, trefwoorden=("cats",), mijn_naam="emiel")`
   - `vergelijk(orkest, reed2, website, agenda, instellingen, vanaf) -> list[Melding]`
 
 - [ ] **Stap 1: Maak `config/trefwoorden.json`**
@@ -1316,7 +1316,7 @@ Het hart van het programma. Alle regels uit het spec komen hier samen.
 ```json
 {
   "mijn_naam": "emiel",
-  "marge_voor_minuten": 180,
+  "marge_voor_minuten": 240,
   "marge_na_minuten": 30,
   "trefwoorden": ["cats"]
 }
@@ -1449,12 +1449,12 @@ class TestAgenda(unittest.TestCase):
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("agenda", m[0].tekst.lower())
 
-    def test_agenda_item_drie_uur_voor_aanvang_telt_als_gevonden(self):
+    def test_agenda_item_vier_uur_voor_aanvang_telt_als_gevonden(self):
         m = vergelijk(
             [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
             [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
             leeg(),
-            [AgendaItem(date(2026, 10, 6), time(17, 15), "Cats Almere", "x")],
+            [AgendaItem(date(2026, 10, 6), time(16, 15), "Cats Almere", "x")],
             INST, VANAF,
         )
         self.assertEqual(m, [])
@@ -1570,7 +1570,10 @@ from catscheck.model import (
 @dataclass(frozen=True)
 class Instellingen:
     mijn_naam: str = "emiel"
-    marge_voor_minuten: int = 180
+    # Vier uur vooraf, een half uur erna. Emiel zet een matinee-afspraak
+    # standaard op 12:00; bij een voorstelling om 15:00 zou drie uur precies
+    # de grens zijn, dus daar zit geen speling in.
+    marge_voor_minuten: int = 240
     marge_na_minuten: int = 30
     trefwoorden: tuple = ("cats",)
 
@@ -2070,7 +2073,7 @@ def _lees_instellingen(pad):
     rauw = json.loads(Path(pad).read_text(encoding="utf-8"))
     return Instellingen(
         mijn_naam=rauw.get("mijn_naam", "emiel"),
-        marge_voor_minuten=rauw.get("marge_voor_minuten", 180),
+        marge_voor_minuten=rauw.get("marge_voor_minuten", 240),
         marge_na_minuten=rauw.get("marge_na_minuten", 30),
         trefwoorden=tuple(t.lower() for t in rauw.get("trefwoorden", ["cats"])),
     )

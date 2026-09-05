@@ -131,11 +131,11 @@ De regel is daarom:
 
 Een agenda-item hoort bij een speelbeurt als het op dezelfde datum valt en de
 starttijd in het venster rond de aanvangstijd valt. Dat venster is bewust
-**asymmetrisch**: van drie uur vóór de aanvangstijd tot een half uur erna.
+**asymmetrisch**: van vier uur vóór de aanvangstijd tot een half uur erna.
 Agenda-items worden namelijk vaak ruim van tevoren gezet (reistijd, inspelen),
 maar vrijwel nooit ná aanvang. Beide grenzen staan in `config/trefwoorden.json`.
 
-Een symmetrisch venster van drie uur zou op dagen met een matinee en een
+Een symmetrisch venster van vier uur zou op dagen met een matinee en een
 avondvoorstelling overlappen, waardoor één agenda-item bij twee speelbeurten kan
 horen. Met het asymmetrische venster overlappen de vensters van 14:30 en 20:00
 niet. Vallen er op een dag toch meerdere kandidaten samen, dan wordt elk
