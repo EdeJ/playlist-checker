@@ -877,8 +877,10 @@ cellen: `<td class="date"><strong>DD-MM-YYYY</strong><br/>HH:MM</td>`,
 
 **Interfaces:**
 - Gebruikt: `Voorstelling`, `ParseFout`, `normaliseer_plaats`, `normaliseer_tijd`
-- Levert: `parse_website(html: str) -> list[Voorstelling]` met `bron="website"`,
-  `type=None` en `reed2=None` (de site zegt niets over bezetting)
+- Levert: `parse_website(html: str) -> tuple[list[Voorstelling], bool]` — de
+  voorstellingen (met `bron="website"`, `type=None` en `reed2=None`; de site
+  zegt niets over bezetting) plus een vlag die zegt of de pagina *volledig*
+  gelezen kon worden
 
 - [ ] **Stap 1: Leg de fixture vast**
 
@@ -913,10 +915,13 @@ FIXTURE = (Path(__file__).parent / "fixtures" / "website.html").read_text(encodi
 
 class TestParseWebsite(unittest.TestCase):
     def setUp(self):
-        self.vs = parse_website(FIXTURE)
+        self.vs, self.volledig = parse_website(FIXTURE)
 
     def test_leest_alle_voorstellingen(self):
         self.assertEqual(len(self.vs), 3)
+
+    def test_een_volledig_gelezen_pagina_meldt_zich_als_volledig(self):
+        self.assertTrue(self.volledig)
 
     def test_leest_datum_tijd_theater_en_plaats(self):
         v = self.vs[0]
@@ -943,6 +948,29 @@ class TestValidatie(unittest.TestCase):
         # Als de site verbouwd wordt moet dat opvallen, niet stil doorlopen.
         with self.assertRaises(ParseFout):
             parse_website("<html><body><p>Binnenkort meer</p></body></html>")
+
+    def test_een_onleesbare_rij_maakt_de_pagina_onvolledig(self):
+        # Eén rij met de attributen in een andere volgorde matcht niet. De
+        # overige rijen komen gewoon door, maar de vlag zegt dat er iets mist —
+        # anders zou die rij later als "ontbreekt op de site" gemeld worden.
+        kreupel = FIXTURE.replace(
+            '<td class="date" data-label="Datum"><strong>17-01-2027</strong>',
+            '<td data-label="Datum" class="date"><strong>17-01-2027</strong>',
+        )
+        vs, volledig = parse_website(kreupel)
+        self.assertEqual(len(vs), 2)
+        self.assertFalse(volledig)
+
+    def test_een_datumcel_in_een_script_telt_niet_mee(self):
+        # De echte pagina heeft een JavaScript-sjabloon dat op een datumcel
+        # lijkt. Dat mag de pagina niet onvolledig maken.
+        met_script = FIXTURE.replace(
+            "</table>",
+            '</table><script>var rij = \'<td class="date">${datum}</td>\';</script>',
+        )
+        vs, volledig = parse_website(met_script)
+        self.assertEqual(len(vs), 3)
+        self.assertTrue(volledig)
 
 
 if __name__ == "__main__":
@@ -982,15 +1010,30 @@ _RIJ = re.compile(
     re.S | re.I,
 )
 
+# De pagina bevat een <script> met een sjabloon dat op een datumcel lijkt. Dat
+# is geen voorstelling, dus scripts gaan er eerst uit.
+_SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
+
+# Hoeveel datumcellen er in de tabel staan. Wijkt dat af van het aantal
+# gelezen rijen, dan is de pagina maar half begrepen.
+_DATUMCEL = re.compile(r'<td class="date"', re.I)
+
 
 def parse_website(html):
-    """Lees de speellijstpagina en geef alle voorstellingen terug."""
-    treffers = _RIJ.findall(html)
+    """Geef (voorstellingen, volledig) terug.
+
+    `volledig` is False als er datumcellen op de pagina staan die de parser
+    niet heeft kunnen lezen. De aanroeper laat de website-vergelijking dan
+    achterwege in plaats van tientallen verzonnen verschillen te melden.
+    """
+    kaal = _SCRIPT.sub("", html)
+    treffers = _RIJ.findall(kaal)
     if not treffers:
         raise ParseFout(
             "geen voorstellingen gevonden op de pagina; de opmaak van "
             "musicalcats.nl is waarschijnlijk gewijzigd"
         )
+    volledig = len(treffers) == len(_DATUMCEL.findall(kaal))
     voorstellingen = []
     for dag, maand, jaar, tijd, theater, plaats in treffers:
         voorstellingen.append(
@@ -1005,7 +1048,7 @@ def parse_website(html):
                 herkomst=f"{dag}-{maand}-{jaar} {tijd}",
             )
         )
-    return voorstellingen
+    return voorstellingen, volledig
 
 
 def _tekst(fragment):
@@ -1017,7 +1060,7 @@ def _tekst(fragment):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_website -v`
-Verwacht: PASS, 6 tests.
+Verwacht: PASS, 9 tests.
 
 - [ ] **Stap 6: Toets tegen de echte pagina**
 
@@ -1026,8 +1069,8 @@ mkdir -p cache
 curl -sL --max-time 30 "https://musicalcats.nl/waar-wanneer/" -o cache/website.html
 python3 -c "
 from catscheck.website import parse_website
-vs = parse_website(open('cache/website.html', encoding='utf-8').read())
-print(len(vs), 'voorstellingen')
+vs, volledig = parse_website(open('cache/website.html', encoding='utf-8').read())
+print(len(vs), 'voorstellingen; volledig gelezen:', volledig)
 import collections
 for (p, t), n in collections.Counter((v.plaats, v.theater) for v in vs).items():
     print(f'{n:4d}  {p:20s} {t}')
@@ -1035,8 +1078,9 @@ for (p, t), n in collections.Counter((v.plaats, v.theater) for v in vs).items():
 ```
 
 Verwacht: 165 voorstellingen verdeeld over 18 speelplaatsen, van ALMERE tot
-UTRECHT. Wijkt het aantal sterk af, dan is de pagina verbouwd en moet de regex
-mee.
+UTRECHT, en `volledig gelezen: True`. Komt daar False uit, dan staan er
+datumcellen op de pagina die de parser niet begrijpt en moet de regex mee —
+dat is geen reden om de vlag weg te halen.
 
 - [ ] **Stap 7: Commit**
 
@@ -1843,7 +1887,7 @@ rest.
 - Aanmaken: `tests/test_rapport.py`
 
 **Interfaces:**
-- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0, samenvatten_vanaf=SAMENVATTEN_VANAF) -> str`
+- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0, samenvatten_vanaf=SAMENVATTEN_VANAF, website_onbetrouwbaar=False) -> str`
   en de constante `SAMENVATTEN_VANAF = 15`
 - `python3 -m catscheck [--vanaf JJJJ-MM-DD] [--cache MAP] [--config BESTAND]`
 
@@ -1912,6 +1956,13 @@ class TestRapport(unittest.TestCase):
     def test_de_peildatum_staat_in_de_kop(self):
         self.assertIn("05-09-2026", maak_rapport([], VANAF))
 
+    def test_onbetrouwbare_website_wordt_bovenaan_gemeld(self):
+        tekst = maak_rapport([], VANAF, website_onbetrouwbaar=True)
+        self.assertIn("musicalcats.nl", tekst)
+        self.assertIn("gedeeltelijk", tekst.lower())
+        # De waarschuwing moet boven de bevindingen staan, niet eronder.
+        self.assertLess(tekst.index("LET OP"), tekst.index("Geen verschillen"))
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -1943,12 +1994,21 @@ SAMENVATTEN_VANAF = 15
 
 
 def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
-                 samenvatten_vanaf=SAMENVATTEN_VANAF):
+                 samenvatten_vanaf=SAMENVATTEN_VANAF,
+                 website_onbetrouwbaar=False):
     regels = [
         "Cats speellijst-checker",
         f"Peildatum: {vanaf.strftime('%d-%m-%Y')} (alles daarvoor is overgeslagen)",
         "",
     ]
+    if website_onbetrouwbaar:
+        # Bovenaan, want het verandert hoe je de rest van het rapport leest.
+        regels += [
+            "LET OP: musicalcats.nl kon maar gedeeltelijk gelezen worden.",
+            "De opmaak van de pagina is waarschijnlijk gewijzigd. De website is",
+            "daarom helemaal buiten de vergelijking gelaten; de rest klopt wel.",
+            "",
+        ]
     if not meldingen:
         regels.append("Geen verschillen gevonden. Alle vier de bronnen zijn het eens.")
     else:
@@ -2001,7 +2061,7 @@ def _vat_samen(groep):
 - [ ] **Stap 4: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_rapport -v`
-Verwacht: PASS, 8 tests.
+Verwacht: PASS, 9 tests.
 
 - [ ] **Stap 5: Schrijf `catscheck/__main__.py`**
 
@@ -2042,7 +2102,7 @@ def main(argv=None):
     try:
         orkest = parse_orkest(_lees(args.cache / "orkest.txt"))
         reed2 = parse_reed2(_lees(args.cache / "reed2.csv"))
-        website = parse_website(_lees(args.cache / "website.html"))
+        website, website_volledig = parse_website(_lees(args.cache / "website.html"))
         agenda, overgeslagen = parse_agenda(_lees(args.cache / "agenda.ics"))
     except ParseFout as fout:
         print(f"De controle kon niet worden uitgevoerd: {fout}", file=sys.stderr)
@@ -2055,10 +2115,15 @@ def main(argv=None):
         )
         return 2
 
-    meldingen = vergelijk(orkest, reed2, website, agenda, inst, vanaf)
+    # Is de pagina maar half gelezen, dan levert vergelijken met de website
+    # alleen verzonnen verschillen op. De rest van de controle gaat wel door.
+    meldingen = vergelijk(
+        orkest, reed2, website if website_volledig else [], agenda, inst, vanaf
+    )
     print(maak_rapport(
         meldingen, vanaf, overgeslagen,
         samenvatten_vanaf=10 ** 9 if args.alles else SAMENVATTEN_VANAF,
+        website_onbetrouwbaar=not website_volledig,
     ))
     return 1 if meldingen else 0
 
@@ -2086,7 +2151,7 @@ if __name__ == "__main__":
 - [ ] **Stap 6: Draai alle tests**
 
 Draai: `python3 -m unittest discover -s tests -v`
-Verwacht: PASS, 60 tests, geen fouten.
+Verwacht: PASS, 70 tests, geen fouten.
 
 - [ ] **Stap 7: Draai op de echte bronnen**
 
