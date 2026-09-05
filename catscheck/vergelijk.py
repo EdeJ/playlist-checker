@@ -162,27 +162,48 @@ def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
     gebruikt = set()
 
     for beurt in mijn:
-        kandidaten = [
-            (n, i) for n, i in enumerate(cats_items)
-            if n not in gebruikt and i.datum == beurt.datum
-            and _past_in_venster(i, beurt, inst)
-        ]
-        if not kandidaten:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, beurt.datum,
-                f"jij staat ingeroosterd maar er staat niets in je agenda — {_omschrijf(beurt)}",
-            ))
-            continue
         # Op de positie zoeken, niet op waarde: twee identieke agenda-items
         # zouden anders naar dezelfde plek in de lijst wijzen.
-        nummer, beste = min(kandidaten, key=lambda paar: _afstand(paar[1], beurt))
-        gebruikt.add(nummer)
-        if beste.start is None:
+        zelfde_dag = [
+            (n, i) for n, i in enumerate(cats_items)
+            if n not in gebruikt and i.datum == beurt.datum
+        ]
+        kandidaten = [
+            (n, i) for n, i in zelfde_dag if _past_in_venster(i, beurt, inst)
+        ]
+        if kandidaten:
+            nummer, beste = min(kandidaten, key=lambda paar: _afstand(paar[1], beurt))
+            gebruikt.add(nummer)
+            if beste.start is None:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, beurt.datum,
+                    f"agenda-item duurt de hele dag, de tijd is dus niet te "
+                    f"controleren — {_omschrijf(beurt)}",
+                    (f"agenda: {beste.titel}",),
+                ))
+        elif zelfde_dag:
+            # Er staat wel iets, maar op een tijd die niet kan kloppen. Dat is
+            # één melding over een verkeerde tijd. Zou het item hier blijven
+            # liggen, dan meldde de checker het twee keer: eerst als
+            # ontbrekende afspraak, daarna als afspraak zonder speelbeurt —
+            # allebei onwaar, want het item hoort juist bij deze voorstelling.
+            nummer, dichtstbij = min(
+                zelfde_dag, key=lambda paar: _afstand(paar[1], beurt)
+            )
+            gebruikt.add(nummer)
+            klok = (dichtstbij.start.strftime("%H:%M")
+                    if dichtstbij.start else "de hele dag")
             meldingen.append(Melding(
                 Ernst.KRITIEK, beurt.datum,
-                f"agenda-item duurt de hele dag, de tijd is dus niet te controleren — "
+                f"agenda-item staat op {klok} maar de voorstelling begint om "
+                f"{beurt.tijd} — {_omschrijf(beurt)}",
+                (f"agenda: {dichtstbij.titel}",),
+            ))
+        else:
+            meldingen.append(Melding(
+                Ernst.KRITIEK, beurt.datum,
+                f"jij staat ingeroosterd maar er staat niets in je agenda — "
                 f"{_omschrijf(beurt)}",
-                (f"agenda: {beste.titel}",),
             ))
 
     for n, item in enumerate(cats_items):

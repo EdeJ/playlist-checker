@@ -140,6 +140,22 @@ class TestAgenda(unittest.TestCase):
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
 
+    def test_verkeerde_tijd_meldt_de_tijd_en_niet_dat_het_ontbreekt(self):
+        # Staat het item op dezelfde dag maar ver buiten het venster, dan is de
+        # tijd verkeerd genoteerd. Eén melding daarover — niet twee meldingen
+        # die allebei het tegendeel beweren.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), time(9, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("09:00", m[0].tekst)
+        self.assertIn("20:15", m[0].tekst)
+        self.assertNotIn("niets in je agenda", m[0].tekst)
+
     def test_agenda_item_na_aanvang_valt_buiten_het_venster(self):
         m = vergelijk(
             [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
