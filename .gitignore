@@ -1,0 +1,9 @@
+# Ruwe kopieën van de bronnen — bevatten o.a. de inhoud van Emiels agenda
+cache/
+
+# De geheime iCal-URL: wie deze heeft kan de agenda lezen
+config/ical_url.txt
+
+__pycache__/
+*.pyc
+.venv/
