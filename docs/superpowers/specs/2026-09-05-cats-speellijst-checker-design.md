@@ -108,7 +108,7 @@ lezen.
 ### Het jaartal wordt afgeleid en geverifieerd
 
 De orkestlijst noemt per rij alleen weekdag en dagnummer; het jaar staat nergens.
-De parser leidt het jaar af uit de volgorde van de maandblokken: het eerste blok
+De parser leidt het jaar af uit de volgorde van de tabbladen: het eerste blok
 is oktober 2026 — gecontroleerd: de weekdagen in dat blok komen overeen met
 oktober 2026 — en bij elke overgang van december naar januari gaat het jaartal
 omhoog. Als controle wordt de berekende weekdag vergeleken met de weekdag die in

@@ -379,7 +379,7 @@ class TestParseOrkest(unittest.TestCase):
         self.assertIn(date(2027, 1, 2), datums)     # januari wordt 2027
         self.assertIn(date(2027, 3, 31), datums)    # maart blijft 2027
 
-    def test_maandblok_met_extra_kolom_wordt_gewoon_gelezen(self):
+    def test_tabblad_met_extra_kolom_wordt_gewoon_gelezen(self):
         # Januari heeft een extra BIJZITTERS-kolom; Reed 2 moet nog kloppen.
         za2 = [v for v in self.vs if v.datum == date(2027, 1, 2)][0]
         self.assertEqual(za2.reed2, "coen")
@@ -455,7 +455,7 @@ MAANDEN = {
     "september": 9, "oktober": 10, "november": 11, "december": 12,
 }
 
-# Begin van een maandblok: de maandnaam twee keer achter elkaar, bijvoorbeeld
+# Begin van een tabblad: de maandnaam twee keer achter elkaar, bijvoorbeeld
 # "Oktober OKTOBER" of "Januari Januari". De Mamma Mia-blokken beginnen met
 # "Feb Mamma Mia" en "Ma Mamma Mia" en matchen dus niet.
 _BLOK = re.compile(
@@ -487,7 +487,7 @@ def parse_orkest(tekst, startjaar=2026):
     voorstellingen = []
     blokken = _splits_blokken(tekst)
     if not blokken:
-        raise ParseFout("geen enkel maandblok gevonden in de orkestlijst")
+        raise ParseFout("geen enkel tabblad gevonden in de orkestlijst")
 
     jaar = startjaar
     vorige_maand = None
@@ -528,7 +528,7 @@ def parse_orkest(tekst, startjaar=2026):
 
 
 def _splits_blokken(tekst):
-    """Geef (maandnaam, inhoud) per maandblok."""
+    """Geef (maandnaam, inhoud) per tabblad."""
     treffers = list(_BLOK.finditer(tekst))
     blokken = []
     for i, t in enumerate(treffers):
@@ -1835,7 +1835,8 @@ rest.
 - Aanmaken: `tests/test_rapport.py`
 
 **Interfaces:**
-- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0) -> str`
+- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0, samenvatten_vanaf=SAMENVATTEN_VANAF) -> str`
+  en de constante `SAMENVATTEN_VANAF = 15`
 - `python3 -m catscheck [--vanaf JJJJ-MM-DD] [--cache MAP] [--config BESTAND]`
 
 - [ ] **Stap 1: Schrijf de falende tests**
@@ -1847,7 +1848,7 @@ import unittest
 from datetime import date
 
 from catscheck.model import Ernst, Melding
-from catscheck.rapport import maak_rapport
+from catscheck.rapport import SAMENVATTEN_VANAF, maak_rapport
 
 VANAF = date(2026, 9, 5)
 
@@ -1933,7 +1934,8 @@ KOPPEN = {
 SAMENVATTEN_VANAF = 15
 
 
-def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0):
+def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
+                 samenvatten_vanaf=SAMENVATTEN_VANAF):
     regels = [
         "Cats speellijst-checker",
         f"Peildatum: {vanaf.strftime('%d-%m-%Y')} (alles daarvoor is overgeslagen)",
@@ -1951,7 +1953,7 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0):
                 continue
             regels.append(f"{KOPPEN[ernst]}  ({len(groep)})")
             regels.append("-" * len(KOPPEN[ernst]))
-            regels += _toon_groep(groep)
+            regels += _toon_groep(groep, samenvatten_vanaf)
             regels.append("")
 
     if overgeslagen_herhalend:
@@ -1962,8 +1964,8 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0):
     return "\n".join(regels).rstrip() + "\n"
 
 
-def _toon_groep(groep):
-    if len(groep) > SAMENVATTEN_VANAF:
+def _toon_groep(groep, samenvatten_vanaf):
+    if len(groep) > samenvatten_vanaf:
         return _vat_samen(groep)
     regels = []
     for m in groep:
@@ -2045,12 +2047,11 @@ def main(argv=None):
         )
         return 2
 
-    if args.alles:
-        import catscheck.rapport as rapportmodule
-        rapportmodule.SAMENVATTEN_VANAF = 10 ** 9
-
     meldingen = vergelijk(orkest, reed2, website, agenda, inst, vanaf)
-    print(maak_rapport(meldingen, vanaf, overgeslagen))
+    print(maak_rapport(
+        meldingen, vanaf, overgeslagen,
+        samenvatten_vanaf=10 ** 9 if args.alles else SAMENVATTEN_VANAF,
+    ))
     return 1 if meldingen else 0
 
 
