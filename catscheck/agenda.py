@@ -16,10 +16,12 @@ _DATUM = re.compile(r"^(\d{8})$")
 
 
 def parse_agenda(ics):
-    """Geef (afspraken, aantal_overgeslagen) terug.
+    """Geef (afspraken, herhalend_overgeslagen, onleesbaar) terug.
 
-    Herhalende afspraken worden overgeslagen; het aantal wordt teruggegeven
-    zodat het rapport kan vermelden dat er iets niet gekeken is.
+    Herhalende afspraken worden overgeslagen. Een VEVENT zonder DTSTART kan
+    niet geplaatst worden en wordt evenmin gelezen. Beide aantallen komen mee
+    terug, zodat het rapport kan melden dat de controle niet volledig was in
+    plaats van er stilzwijgend overheen te stappen.
     """
     regels = _ontvouw(ics)
     if not any(r.startswith("BEGIN:VCALENDAR") for r in regels):
@@ -27,6 +29,7 @@ def parse_agenda(ics):
 
     items = []
     overgeslagen = 0
+    onleesbaar = 0
     huidig = None
     for regel in regels:
         if regel == "BEGIN:VEVENT":
@@ -39,6 +42,10 @@ def parse_agenda(ics):
                 overgeslagen += 1
             elif "DTSTART" in huidig:
                 items.append(_maak_item(huidig))
+            else:
+                # Zonder begintijd valt niet te zeggen wanneer dit is. Niet
+                # stil weggooien: tellen, zodat het rapport het kan melden.
+                onleesbaar += 1
             huidig = None
             continue
         if huidig is None:
@@ -49,7 +56,7 @@ def parse_agenda(ics):
             huidig[naam] = waarde
             if naam == "DTSTART":
                 huidig["DTSTART_PARAMS"] = sleutel
-    return items, overgeslagen
+    return items, overgeslagen, onleesbaar
 
 
 def _ontvouw(ics):

@@ -9,7 +9,7 @@ FIXTURE = (Path(__file__).parent / "fixtures" / "agenda.ics").read_text(encoding
 
 class TestParseAgenda(unittest.TestCase):
     def setUp(self):
-        self.items, self.overgeslagen = parse_agenda(FIXTURE)
+        self.items, self.overgeslagen, self.onleesbaar = parse_agenda(FIXTURE)
 
     def test_leest_een_afspraak_met_tijdzone(self):
         item = [i for i in self.items if i.titel == "Cats Almere"][0]
@@ -40,6 +40,18 @@ class TestParseAgenda(unittest.TestCase):
     def test_niet_cats_afspraken_blijven_gewoon_staan(self):
         # Filteren op trefwoord gebeurt later, in vergelijk.py.
         self.assertIn("Verjaardag Joost", [i.titel for i in self.items])
+        self.assertEqual(self.onleesbaar, 0)
+
+    def test_afspraak_zonder_begintijd_wordt_geteld_niet_stil_weggegooid(self):
+        # Een VEVENT zonder DTSTART valt niet te plaatsen. Hij mag niet
+        # geruisloos verdwijnen: het rapport moet kunnen melden dat de
+        # controle niet over alles ging.
+        kapot = FIXTURE.replace(
+            "DTSTART;TZID=Europe/Amsterdam:20261020T200000\n", ""
+        )
+        items, herhalend, onleesbaar = parse_agenda(kapot)
+        self.assertEqual(onleesbaar, 1)
+        self.assertNotIn("Verjaardag Joost", [i.titel for i in items])
 
 
 if __name__ == "__main__":
