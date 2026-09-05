@@ -41,6 +41,12 @@ Google Agenda              →  curl op geheime iCal-URL   →  cache/agenda.ics
 De iCal-URL is alleen-lezen per definitie: een privé-adres in iCal-indeling kan
 gelezen worden, maar er kan niets mee gewijzigd worden.
 
+Voordat de twee Drive-bestanden opnieuw opgehaald worden, wordt hun
+`modifiedTime` opgevraagd en vergeleken met wat er in `cache/stempels.json`
+staat. Is er niets gewijzigd, dan wordt het ophalen overgeslagen. De orkestlijst
+is een bestand van 182 kB en het uitlezen kost merkbaar tijd; die kosten hoeven
+alleen gemaakt te worden als de lijst daadwerkelijk veranderd is.
+
 ## Read-only wordt afgedwongen, niet gevraagd
 
 In `.claude/settings.json` komt een `permissions.deny`-regel op alle schrijvende
