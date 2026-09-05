@@ -23,15 +23,30 @@ _RIJ = re.compile(
     re.S | re.I,
 )
 
+# De pagina bevat een <script> met een sjabloon dat op een datumcel lijkt. Dat
+# is geen voorstelling, dus scripts gaan er eerst uit.
+_SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
+
+# Hoeveel datumcellen er in de tabel staan. Wijkt dat af van het aantal
+# gelezen rijen, dan is de pagina maar half begrepen.
+_DATUMCEL = re.compile(r'<td[^>]*?class="date"', re.I)
+
 
 def parse_website(html):
-    """Lees de speellijstpagina en geef alle voorstellingen terug."""
-    treffers = _RIJ.findall(html)
+    """Geef (voorstellingen, volledig) terug.
+
+    `volledig` is False als er datumcellen op de pagina staan die de parser
+    niet heeft kunnen lezen. De aanroeper laat de website-vergelijking dan
+    achterwege in plaats van tientallen verzonnen verschillen te melden.
+    """
+    kaal = _SCRIPT.sub("", html)
+    treffers = _RIJ.findall(kaal)
     if not treffers:
         raise ParseFout(
             "geen voorstellingen gevonden op de pagina; de opmaak van "
             "musicalcats.nl is waarschijnlijk gewijzigd"
         )
+    volledig = len(treffers) == len(_DATUMCEL.findall(kaal))
     voorstellingen = []
     for dag, maand, jaar, tijd, theater, plaats in treffers:
         voorstellingen.append(
@@ -46,7 +61,7 @@ def parse_website(html):
                 herkomst=f"{dag}-{maand}-{jaar} {tijd}",
             )
         )
-    return voorstellingen
+    return voorstellingen, volledig
 
 
 def _tekst(fragment):

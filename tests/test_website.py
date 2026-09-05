@@ -10,10 +10,13 @@ FIXTURE = (Path(__file__).parent / "fixtures" / "website.html").read_text(encodi
 
 class TestParseWebsite(unittest.TestCase):
     def setUp(self):
-        self.vs = parse_website(FIXTURE)
+        self.vs, self.volledig = parse_website(FIXTURE)
 
     def test_leest_alle_voorstellingen(self):
         self.assertEqual(len(self.vs), 3)
+
+    def test_een_volledig_gelezen_pagina_meldt_zich_als_volledig(self):
+        self.assertTrue(self.volledig)
 
     def test_leest_datum_tijd_theater_en_plaats(self):
         v = self.vs[0]
@@ -40,6 +43,29 @@ class TestValidatie(unittest.TestCase):
         # Als de site verbouwd wordt moet dat opvallen, niet stil doorlopen.
         with self.assertRaises(ParseFout):
             parse_website("<html><body><p>Binnenkort meer</p></body></html>")
+
+    def test_een_onleesbare_rij_maakt_de_pagina_onvolledig(self):
+        # Eén rij met de attributen in een andere volgorde matcht niet. De
+        # overige rijen komen gewoon door, maar de vlag zegt dat er iets mist —
+        # anders zou die rij later als "ontbreekt op de site" gemeld worden.
+        kreupel = FIXTURE.replace(
+            '<td class="date" data-label="Datum"><strong>17-01-2027</strong>',
+            '<td data-label="Datum" class="date"><strong>17-01-2027</strong>',
+        )
+        vs, volledig = parse_website(kreupel)
+        self.assertEqual(len(vs), 2)
+        self.assertFalse(volledig)
+
+    def test_een_datumcel_in_een_script_telt_niet_mee(self):
+        # De echte pagina heeft een JavaScript-sjabloon dat op een datumcel
+        # lijkt. Dat mag de pagina niet onvolledig maken.
+        met_script = FIXTURE.replace(
+            "</table>",
+            '</table><script>var rij = \'<td class="date">${datum}</td>\';</script>',
+        )
+        vs, volledig = parse_website(met_script)
+        self.assertEqual(len(vs), 3)
+        self.assertTrue(volledig)
 
 
 if __name__ == "__main__":
