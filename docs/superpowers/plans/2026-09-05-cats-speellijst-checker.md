@@ -1103,8 +1103,9 @@ git commit -m "feat: parser voor musicalcats.nl"
 
 **Interfaces:**
 - Gebruikt: `AgendaItem`, `ParseFout` uit `catscheck.model`
-- Levert: `parse_agenda(ics: str) -> tuple[list[AgendaItem], int]` — de
-  afspraken plus het aantal overgeslagen herhalende afspraken — en
+- Levert: `parse_agenda(ics: str) -> tuple[list[AgendaItem], int, int]` — de
+  afspraken, het aantal overgeslagen herhalende afspraken, en het aantal
+  afspraken zonder begintijd die niet gelezen konden worden — plus
   `AGENDA_TIJDZONE = ZoneInfo("Europe/Amsterdam")`
 
 Beperking, bewust: afspraken met een `RRULE` (herhalende afspraken) worden
@@ -1170,7 +1171,7 @@ FIXTURE = (Path(__file__).parent / "fixtures" / "agenda.ics").read_text(encoding
 
 class TestParseAgenda(unittest.TestCase):
     def setUp(self):
-        self.items, self.overgeslagen = parse_agenda(FIXTURE)
+        self.items, self.overgeslagen, self.onleesbaar = parse_agenda(FIXTURE)
 
     def test_leest_een_afspraak_met_tijdzone(self):
         item = [i for i in self.items if i.titel == "Cats Almere"][0]
@@ -1201,6 +1202,18 @@ class TestParseAgenda(unittest.TestCase):
     def test_niet_cats_afspraken_blijven_gewoon_staan(self):
         # Filteren op trefwoord gebeurt later, in vergelijk.py.
         self.assertIn("Verjaardag Joost", [i.titel for i in self.items])
+        self.assertEqual(self.onleesbaar, 0)
+
+    def test_afspraak_zonder_begintijd_wordt_geteld_niet_stil_weggegooid(self):
+        # Een VEVENT zonder DTSTART valt niet te plaatsen. Hij mag niet
+        # geruisloos verdwijnen: het rapport moet kunnen melden dat de
+        # controle niet over alles ging.
+        kapot = FIXTURE.replace(
+            "DTSTART;TZID=Europe/Amsterdam:20261020T200000\n", ""
+        )
+        items, herhalend, onleesbaar = parse_agenda(kapot)
+        self.assertEqual(onleesbaar, 1)
+        self.assertNotIn("Verjaardag Joost", [i.titel for i in items])
 
 
 if __name__ == "__main__":
@@ -1233,10 +1246,12 @@ _DATUM = re.compile(r"^(\d{8})$")
 
 
 def parse_agenda(ics):
-    """Geef (afspraken, aantal_overgeslagen) terug.
+    """Geef (afspraken, herhalend_overgeslagen, onleesbaar) terug.
 
-    Herhalende afspraken worden overgeslagen; het aantal wordt teruggegeven
-    zodat het rapport kan vermelden dat er iets niet gekeken is.
+    Herhalende afspraken worden overgeslagen. Een VEVENT zonder DTSTART kan
+    niet geplaatst worden en wordt evenmin gelezen. Beide aantallen komen mee
+    terug, zodat het rapport kan melden dat de controle niet volledig was in
+    plaats van er stilzwijgend overheen te stappen.
     """
     regels = _ontvouw(ics)
     if not any(r.startswith("BEGIN:VCALENDAR") for r in regels):
@@ -1244,6 +1259,7 @@ def parse_agenda(ics):
 
     items = []
     overgeslagen = 0
+    onleesbaar = 0
     huidig = None
     for regel in regels:
         if regel == "BEGIN:VEVENT":
@@ -1256,6 +1272,10 @@ def parse_agenda(ics):
                 overgeslagen += 1
             elif "DTSTART" in huidig:
                 items.append(_maak_item(huidig))
+            else:
+                # Zonder begintijd valt niet te zeggen wanneer dit is. Niet
+                # stil weggooien: tellen, zodat het rapport het kan melden.
+                onleesbaar += 1
             huidig = None
             continue
         if huidig is None:
@@ -1266,7 +1286,7 @@ def parse_agenda(ics):
             huidig[naam] = waarde
             if naam == "DTSTART":
                 huidig["DTSTART_PARAMS"] = sleutel
-    return items, overgeslagen
+    return items, overgeslagen, onleesbaar
 
 
 def _ontvouw(ics):
@@ -1331,7 +1351,7 @@ def _titel(velden):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_agenda -v`
-Verwacht: PASS, 6 tests.
+Verwacht: PASS, 7 tests.
 
 - [ ] **Stap 6: Commit**
 
@@ -1515,6 +1535,22 @@ class TestAgenda(unittest.TestCase):
             INST, VANAF,
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+
+    def test_verkeerde_tijd_meldt_de_tijd_en_niet_dat_het_ontbreekt(self):
+        # Staat het item op dezelfde dag maar ver buiten het venster, dan is de
+        # tijd verkeerd genoteerd. Eén melding daarover — niet twee meldingen
+        # die allebei het tegendeel beweren.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), time(9, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("09:00", m[0].tekst)
+        self.assertIn("20:15", m[0].tekst)
+        self.assertNotIn("niets in je agenda", m[0].tekst)
 
     def test_agenda_item_na_aanvang_valt_buiten_het_venster(self):
         m = vergelijk(
@@ -1757,27 +1793,48 @@ def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
     gebruikt = set()
 
     for beurt in mijn:
-        kandidaten = [
-            (n, i) for n, i in enumerate(cats_items)
-            if n not in gebruikt and i.datum == beurt.datum
-            and _past_in_venster(i, beurt, inst)
-        ]
-        if not kandidaten:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, beurt.datum,
-                f"jij staat ingeroosterd maar er staat niets in je agenda — {_omschrijf(beurt)}",
-            ))
-            continue
         # Op de positie zoeken, niet op waarde: twee identieke agenda-items
         # zouden anders naar dezelfde plek in de lijst wijzen.
-        nummer, beste = min(kandidaten, key=lambda paar: _afstand(paar[1], beurt))
-        gebruikt.add(nummer)
-        if beste.start is None:
+        zelfde_dag = [
+            (n, i) for n, i in enumerate(cats_items)
+            if n not in gebruikt and i.datum == beurt.datum
+        ]
+        kandidaten = [
+            (n, i) for n, i in zelfde_dag if _past_in_venster(i, beurt, inst)
+        ]
+        if kandidaten:
+            nummer, beste = min(kandidaten, key=lambda paar: _afstand(paar[1], beurt))
+            gebruikt.add(nummer)
+            if beste.start is None:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, beurt.datum,
+                    f"agenda-item duurt de hele dag, de tijd is dus niet te "
+                    f"controleren — {_omschrijf(beurt)}",
+                    (f"agenda: {beste.titel}",),
+                ))
+        elif zelfde_dag:
+            # Er staat wel iets, maar op een tijd die niet kan kloppen. Dat is
+            # één melding over een verkeerde tijd. Zou het item hier blijven
+            # liggen, dan meldde de checker het twee keer: eerst als
+            # ontbrekende afspraak, daarna als afspraak zonder speelbeurt —
+            # allebei onwaar, want het item hoort juist bij deze voorstelling.
+            nummer, dichtstbij = min(
+                zelfde_dag, key=lambda paar: _afstand(paar[1], beurt)
+            )
+            gebruikt.add(nummer)
+            klok = (dichtstbij.start.strftime("%H:%M")
+                    if dichtstbij.start else "de hele dag")
             meldingen.append(Melding(
                 Ernst.KRITIEK, beurt.datum,
-                f"agenda-item duurt de hele dag, de tijd is dus niet te controleren — "
+                f"agenda-item staat op {klok} maar de voorstelling begint om "
+                f"{beurt.tijd} — {_omschrijf(beurt)}",
+                (f"agenda: {dichtstbij.titel}",),
+            ))
+        else:
+            meldingen.append(Melding(
+                Ernst.KRITIEK, beurt.datum,
+                f"jij staat ingeroosterd maar er staat niets in je agenda — "
                 f"{_omschrijf(beurt)}",
-                (f"agenda: {beste.titel}",),
             ))
 
     for n, item in enumerate(cats_items):
@@ -1866,7 +1923,7 @@ def _omschrijf(v):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_vergelijk -v`
-Verwacht: PASS, 18 tests.
+Verwacht: PASS, 20 tests.
 
 - [ ] **Stap 6: Commit**
 
@@ -1890,7 +1947,7 @@ rest.
 - Aanmaken: `tests/test_rapport.py`
 
 **Interfaces:**
-- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0, samenvatten_vanaf=SAMENVATTEN_VANAF, website_onbetrouwbaar=False) -> str`
+- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0, samenvatten_vanaf=SAMENVATTEN_VANAF, website_onbetrouwbaar=False, onleesbare_afspraken=0) -> str`
   en de constante `SAMENVATTEN_VANAF = 15`
 - `python3 -m catscheck [--vanaf JJJJ-MM-DD] [--cache MAP] [--config BESTAND]`
 
@@ -1959,6 +2016,11 @@ class TestRapport(unittest.TestCase):
     def test_de_peildatum_staat_in_de_kop(self):
         self.assertIn("05-09-2026", maak_rapport([], VANAF))
 
+    def test_afspraken_zonder_begintijd_worden_vermeld(self):
+        tekst = maak_rapport([], VANAF, onleesbare_afspraken=2)
+        self.assertIn("2", tekst)
+        self.assertIn("begintijd", tekst.lower())
+
     def test_onbetrouwbare_website_wordt_bovenaan_gemeld(self):
         tekst = maak_rapport([], VANAF, website_onbetrouwbaar=True)
         self.assertIn("musicalcats.nl", tekst)
@@ -1998,7 +2060,7 @@ SAMENVATTEN_VANAF = 15
 
 def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
                  samenvatten_vanaf=SAMENVATTEN_VANAF,
-                 website_onbetrouwbaar=False):
+                 website_onbetrouwbaar=False, onleesbare_afspraken=0):
     regels = [
         "Cats speellijst-checker",
         f"Peildatum: {vanaf.strftime('%d-%m-%Y')} (alles daarvoor is overgeslagen)",
@@ -2032,6 +2094,11 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
             f"Let op: {overgeslagen_herhalend} herhalende agenda-afspraken zijn "
             f"niet meegenomen; die worden niet uitgerekend."
         )
+    if onleesbare_afspraken:
+        regels.append(
+            f"Let op: {onleesbare_afspraken} agenda-afspraken misten een "
+            f"begintijd en konden niet gecontroleerd worden."
+        )
     return "\n".join(regels).rstrip() + "\n"
 
 
@@ -2064,7 +2131,7 @@ def _vat_samen(groep):
 - [ ] **Stap 4: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_rapport -v`
-Verwacht: PASS, 9 tests.
+Verwacht: PASS, 10 tests.
 
 - [ ] **Stap 5: Schrijf `catscheck/__main__.py`**
 
@@ -2106,7 +2173,7 @@ def main(argv=None):
         orkest = parse_orkest(_lees(args.cache / "orkest.txt"))
         reed2 = parse_reed2(_lees(args.cache / "reed2.csv"))
         website, website_volledig = parse_website(_lees(args.cache / "website.html"))
-        agenda, overgeslagen = parse_agenda(_lees(args.cache / "agenda.ics"))
+        agenda, overgeslagen, onleesbaar = parse_agenda(_lees(args.cache / "agenda.ics"))
     except ParseFout as fout:
         print(f"De controle kon niet worden uitgevoerd: {fout}", file=sys.stderr)
         return 2
@@ -2127,6 +2194,7 @@ def main(argv=None):
         meldingen, vanaf, overgeslagen,
         samenvatten_vanaf=10 ** 9 if args.alles else SAMENVATTEN_VANAF,
         website_onbetrouwbaar=not website_volledig,
+        onleesbare_afspraken=onleesbaar,
     ))
     return 1 if meldingen else 0
 
@@ -2154,7 +2222,7 @@ if __name__ == "__main__":
 - [ ] **Stap 6: Draai alle tests**
 
 Draai: `python3 -m unittest discover -s tests -v`
-Verwacht: PASS, 70 tests, geen fouten.
+Verwacht: PASS, 74 tests, geen fouten.
 
 - [ ] **Stap 7: Draai op de echte bronnen**
 

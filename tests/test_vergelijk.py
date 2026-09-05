@@ -1,0 +1,209 @@
+import unittest
+from datetime import date, time
+
+from catscheck.model import AgendaItem, Ernst, Voorstelling
+from catscheck.vergelijk import Instellingen, vergelijk
+
+VANAF = date(2026, 1, 1)
+INST = Instellingen()
+
+
+def v(bron, dag, tijd, reed2=None, plaats="ALMERE", soort="REG", theater=None):
+    return Voorstelling(
+        datum=dag, tijd=tijd, type=soort, plaats=plaats, theater=theater,
+        reed2=reed2, bron=bron, herkomst="test",
+    )
+
+
+def leeg():
+    return []
+
+
+class TestBezetting(unittest.TestCase):
+    def test_naamverschil_met_emiel_is_kritiek(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), "20:00", "christof")],
+            [v("reed2", date(2026, 10, 22), "20:00", "emiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        kritiek = [x for x in m if x.ernst is Ernst.KRITIEK]
+        self.assertEqual(len(kritiek), 1)
+        self.assertIn("christof", kritiek[0].tekst)
+        self.assertIn("emiel", kritiek[0].tekst)
+
+    def test_naamverschil_tussen_collegas_is_een_verschil_geen_kritiek(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), "20:00", "christof")],
+            [v("reed2", date(2026, 10, 22), "20:00", "michiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.VERSCHIL])
+
+    def test_onbekende_naam_bij_reed2_is_altijd_kritiek(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), "20:00", "marielle")],
+            [v("reed2", date(2026, 10, 22), "20:00", "michiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        kritiek = [x for x in m if x.ernst is Ernst.KRITIEK]
+        self.assertEqual(len(kritiek), 1)
+        self.assertIn("marielle", kritiek[0].tekst)
+
+    def test_lege_cel_in_de_orkestlijst_is_open(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), "20:00", None)],
+            [v("reed2", date(2026, 10, 22), "20:00", "michiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.OPEN])
+
+    def test_gelijke_bezetting_levert_niets_op(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), "20:00", "emiel")],
+            [v("reed2", date(2026, 10, 22), "20:00", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 22), time(17, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+
+class TestVoorstellingen(unittest.TestCase):
+    def test_verschillende_aanvangstijd_wordt_gemeld_als_tijdsverschil(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 11), "15:00", "emiel")],
+            [v("reed2", date(2026, 10, 11), "14:30", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 11), time(12, 30), "Cats", "x")],
+            INST, VANAF,
+        )
+        tijden = [x for x in m if "15:00" in x.tekst and "14:30" in x.tekst]
+        self.assertEqual(len(tijden), 1)
+        self.assertIs(tijden[0].ernst, Ernst.VERSCHIL)
+
+    def test_verschillende_plaats_wordt_gemeld(self):
+        m = vergelijk(
+            [v("orkest", date(2027, 5, 20), "19:45", "emiel", plaats="DEN BOSCH")],
+            [v("reed2", date(2027, 5, 20), "19:45", "emiel", plaats="DEN HAAG")],
+            leeg(),
+            [AgendaItem(date(2027, 5, 20), time(17, 0), "Cats", "x")],
+            INST, VANAF,
+        )
+        self.assertTrue(any("DEN BOSCH" in x.tekst and "DEN HAAG" in x.tekst for x in m))
+
+    def test_dag_met_twee_shows_tegenover_een_dag_met_een_show(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 24), "15:00", "michiel"),
+             v("orkest", date(2026, 10, 24), "20:00", "michiel")],
+            [v("reed2", date(2026, 10, 24), "20:00", "michiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertTrue(any("aantal voorstellingen" in x.tekst.lower() for x in m))
+
+    def test_website_verschil_is_alleen_informatief(self):
+        m = vergelijk(
+            [v("orkest", date(2027, 5, 20), "19:45", "michiel", plaats="DEN BOSCH")],
+            [v("reed2", date(2027, 5, 20), "19:45", "michiel", plaats="DEN BOSCH")],
+            [v("website", date(2027, 5, 20), "19:45", None, plaats="DEN HAAG")],
+            leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.WEBSITE])
+
+
+class TestAgenda(unittest.TestCase):
+    def test_speelbeurt_zonder_agenda_item_is_kritiek(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+        self.assertIn("agenda", m[0].tekst.lower())
+
+    def test_agenda_item_vier_uur_voor_aanvang_telt_als_gevonden(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), time(16, 15), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+    def test_agenda_item_ruim_te_vroeg_valt_buiten_het_venster(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), time(9, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+
+    def test_agenda_item_na_aanvang_valt_buiten_het_venster(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), time(21, 30), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+
+    def test_hele_dag_item_telt_als_aanwezig_maar_meldt_dat_de_tijd_niet_toetsbaar_is(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), None, "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("hele dag", m[0].tekst.lower())
+
+    def test_cats_agenda_item_zonder_speelbeurt_is_kritiek(self):
+        m = vergelijk(
+            leeg(), leeg(), leeg(),
+            [AgendaItem(date(2026, 10, 7), time(17, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+        self.assertIn("geen speelbeurt", m[0].tekst.lower())
+
+    def test_agenda_item_zonder_trefwoord_wordt_genegeerd(self):
+        m = vergelijk(
+            leeg(), leeg(), leeg(),
+            [AgendaItem(date(2026, 10, 7), time(17, 0), "Verjaardag Joost", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+    def test_repetitiedag_uit_de_reed2_sheet_telt_mee_voor_de_agenda(self):
+        m = vergelijk(
+            leeg(),
+            [v("reed2", date(2026, 9, 25), None, "emiel", soort="MON")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+
+    def test_vrije_dagen_leveren_niets_op(self):
+        m = vergelijk(
+            leeg(),
+            [v("reed2", date(2026, 9, 28), None, None, soort="VRIJ", plaats=None)],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+
+class TestVanaf(unittest.TestCase):
+    def test_voorstellingen_voor_de_peildatum_worden_overgeslagen(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "christof")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(), leeg(), INST, date(2026, 11, 1),
+        )
+        self.assertEqual(m, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
