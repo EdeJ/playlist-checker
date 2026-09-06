@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Haalt de website en de agenda op naar cache/. Alleen lezen.
+# Haalt de website, de orkestlijst, de reed 2-sheet en de agenda op naar
+# cache/. Alleen lezen.
 #
 # Elke download gaat eerst naar een tijdelijk bestand en wordt pas op zijn
 # plek gezet als hij compleet blijkt. `curl -o` kapt het doelbestand namelijk
@@ -50,10 +51,25 @@ else
 fi
 
 echo "reed 2-sheet ophalen..."
+# Van de vier bronnen is dit de enige waarbij alleen de eerste regel werd
+# getoetst. De agenda toetst head -1 én tail -5, de orkestlijst gaat door
+# zipfile.is_zipfile (dat de central directory aan het eind nodig heeft), de
+# website wordt door de parser op volledigheid getoetst. Een op een
+# rijgrens afgekapte CSV kwam hier ongeschonden doorheen — en omdat de
+# vergelijking afkapt op de laatste datum die beide bronnen kennen, verkort
+# een halve sheet stilzwijgend het venster en verdwijnt elke melding
+# daarachter. Daarom ook de laatste regel toetsen: die moet evenveel velden
+# hebben als de kopregel.
 if curl -sSL --fail --max-time 30 \
         "https://docs.google.com/spreadsheets/d/${reed2_id}/export?format=csv" \
         -o "$werkmap/reed2.csv" \
-   && head -1 "$werkmap/reed2.csv" | grep -q '^Speeldatum,Type'; then
+   && head -1 "$werkmap/reed2.csv" | grep -q '^Speeldatum,Type' \
+   && python3 -c '
+import csv, sys
+with open(sys.argv[1], newline="", encoding="utf-8") as f:
+    rijen = [r for r in csv.reader(f) if any(veld.strip() for veld in r)]
+sys.exit(0 if rijen and len(rijen[-1]) == len(rijen[0]) else 1)
+' "$werkmap/reed2.csv"; then
   mv "$werkmap/reed2.csv" cache/reed2.csv
 else
   echo "reed 2-sheet ophalen mislukt; cache/reed2.csv blijft ongewijzigd." \
