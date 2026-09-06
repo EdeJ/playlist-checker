@@ -55,6 +55,27 @@ wat Emiel eraan kan doen: zelf zijn agenda bijwerken, het met Christof en
 Michiel opnemen, of het bij Ryanne melden omdat de orkestlijst aangepast moet
 worden. Dat laatste doet Emiel zelf — jij past niets aan.
 
+## Welk model hiervoor nodig is
+
+De uitkomst van deze controle hangt niet af van het model. Al het vergelijken
+gebeurt in `python3 -m catscheck`, een gewoon script zonder AI: dezelfde
+bronnen leveren altijd hetzelfde rapport op. Het model haalt alleen de twee
+Drive-bestanden op, start het script en licht de uitkomst toe. Het model vindt
+de verschillen niet — het script doet dat.
+
+Een middelzwaar model is hier daarom ruim voldoende. Het zwaarste model kost
+meer en levert niets extra's op. Op het moment van schrijven, september 2026,
+is dat middelzware model Sonnet.
+
+Draait deze sessie op een zwaarder model dan dat, meld dan **één keer** — bij
+de eerste run in een sessie, niet elke keer — dat het met een lichter model
+even goed en goedkoper kan, en dat Emiel dat met `/model` kan wisselen. Draait
+de sessie al op een licht of middelzwaar model, zeg er dan niets over.
+
+Verschijnt er later een nieuwe generatie modellen: het gaat om de klasse, niet
+om de naam. Kies de middelste van wat er dan beschikbaar is. De reden blijft
+dezelfde en veroudert niet — het model is niet wat de verschillen vindt.
+
 ## Bij een ParseFout
 
 Een parser die zijn structuur niet herkent stopt met een `ParseFout`. Dat
