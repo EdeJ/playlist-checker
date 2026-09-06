@@ -1,7 +1,7 @@
 # Cats speellijst-checker — ontwerp
 
 Datum: 2026-09-05
-Status: ontwerp goedgekeurd, nog niet gebouwd
+Status: gebouwd (2026-09-06)
 
 ## Doel
 
@@ -66,15 +66,21 @@ voor elke sessie in dit project, ook toekomstige.
 
 Vier parsers, één vergelijker. Elke bron heeft zijn eigen eigenaardigheden, dus
 elke bron krijgt zijn eigen parser die naar hetzelfde platte formaat vertaalt.
+Gebouwd is dit als het `catscheck`-pakket met één ophaalscript, niet als losse
+scripts per stap:
 
 ```
+catscheck/
+  model.py       gedeeld model en normalisatie (Voorstelling, AgendaItem, ...)
+  orkest.py      cache/orkest.txt   → genormaliseerde voorstellingen
+  reed2.py       cache/reed2.csv    → genormaliseerde voorstellingen
+  website.py     cache/website.html → genormaliseerde voorstellingen
+  agenda.py      cache/agenda.ics   → agenda-items
+  vergelijk.py   vier lijsten       → bevindingen
+  rapport.py     bevindingen        → Nederlandse terminaltekst
+  __main__.py    commandoregel, aan te roepen als `python3 -m catscheck`
 scripts/
-  fetch_agenda.sh     geheime iCal-URL ophalen naar cache/agenda.ics
-  parse_orkest.py     cache/orkest.txt   → genormaliseerde voorstellingen
-  parse_reed2.py      cache/reed2.csv    → genormaliseerde voorstellingen
-  parse_website.py    cache/website.html → genormaliseerde voorstellingen
-  parse_agenda.py     cache/agenda.ics   → agenda-items
-  compare.py          vier lijsten       → rapport
+  ophalen.sh     musicalcats.nl en de geheime iCal-URL ophalen naar cache/
 ```
 
 ### Genormaliseerd formaat
@@ -83,7 +89,7 @@ scripts/
 Voorstelling(
     datum,        # date, altijd met jaar
     tijd,         # "20:00" of None bij dagen zonder aanvangstijd
-    type,         # TO, PREM, REG, VP, S-OPT, MON, BESL, BOUW, VRIJ
+    type,         # TO, PREM, REG, VP, S-OPT, MON, BESL, BOUW, VRIJ, OVERSTA DAG
     plaats,       # "ALMERE" — genormaliseerd naar hoofdletters
     theater,      # "Kunstlinie" of None (orkestlijst noemt geen theater)
     reed2,        # "Emiel" / "Christof" / "Coen" / "Michiel" / None
@@ -108,7 +114,7 @@ lezen.
 ### Het jaartal wordt afgeleid en geverifieerd
 
 De orkestlijst noemt per rij alleen weekdag en dagnummer; het jaar staat nergens.
-De parser leidt het jaar af uit de volgorde van de maandblokken: het eerste blok
+De parser leidt het jaar af uit de volgorde van de tabbladen: het eerste blok
 is oktober 2026 — gecontroleerd: de weekdagen in dat blok komen overeen met
 oktober 2026 — en bij elke overgang van december naar januari gaat het jaartal
 omhoog. Als controle wordt de berekende weekdag vergeleken met de weekdag die in
@@ -131,11 +137,11 @@ De regel is daarom:
 
 Een agenda-item hoort bij een speelbeurt als het op dezelfde datum valt en de
 starttijd in het venster rond de aanvangstijd valt. Dat venster is bewust
-**asymmetrisch**: van drie uur vóór de aanvangstijd tot een half uur erna.
+**asymmetrisch**: van vier uur vóór de aanvangstijd tot een half uur erna.
 Agenda-items worden namelijk vaak ruim van tevoren gezet (reistijd, inspelen),
 maar vrijwel nooit ná aanvang. Beide grenzen staan in `config/trefwoorden.json`.
 
-Een symmetrisch venster van drie uur zou op dagen met een matinee en een
+Een symmetrisch venster van vier uur zou op dagen met een matinee en een
 avondvoorstelling overlappen, waardoor één agenda-item bij twee speelbeurten kan
 horen. Met het asymmetrische venster overlappen de vensters van 14:30 en 20:00
 niet. Vallen er op een dag toch meerdere kandidaten samen, dan wordt elk

@@ -379,10 +379,15 @@ class TestParseOrkest(unittest.TestCase):
         self.assertIn(date(2027, 1, 2), datums)     # januari wordt 2027
         self.assertIn(date(2027, 3, 31), datums)    # maart blijft 2027
 
-    def test_maandblok_met_extra_kolom_wordt_gewoon_gelezen(self):
-        # Januari heeft een extra BIJZITTERS-kolom; Reed 2 moet nog kloppen.
+    def test_naam_in_de_reed1_kolom_wordt_niet_voor_reed2_aangezien(self):
+        # Januari heeft twee extra BIJZITTERS-kolommen achteraan, en Coen staat
+        # er in de Reed 1-kolom terwijl Reed 2 leeg is. Coen bespeelt beide
+        # stoelen, dus een parser die op een vaste kolompositie werkt in plaats
+        # van op de kopnaam pikt hem hier ten onrechte op als Reed 2.
         za2 = [v for v in self.vs if v.datum == date(2027, 1, 2)][0]
-        self.assertEqual(za2.reed2, "coen")
+        self.assertEqual(za2.tijd, "14:30")
+        self.assertEqual(za2.plaats, "BREDA")
+        self.assertIsNone(za2.reed2)
 
     def test_leeg_tussen_haakjes_in_een_andere_kolom_verstoort_niets(self):
         zo13 = [v for v in self.vs if v.datum == date(2026, 12, 13)][0]
@@ -455,7 +460,7 @@ MAANDEN = {
     "september": 9, "oktober": 10, "november": 11, "december": 12,
 }
 
-# Begin van een maandblok: de maandnaam twee keer achter elkaar, bijvoorbeeld
+# Begin van een tabblad: de maandnaam twee keer achter elkaar, bijvoorbeeld
 # "Oktober OKTOBER" of "Januari Januari". De Mamma Mia-blokken beginnen met
 # "Feb Mamma Mia" en "Ma Mamma Mia" en matchen dus niet.
 _BLOK = re.compile(
@@ -487,7 +492,7 @@ def parse_orkest(tekst, startjaar=2026):
     voorstellingen = []
     blokken = _splits_blokken(tekst)
     if not blokken:
-        raise ParseFout("geen enkel maandblok gevonden in de orkestlijst")
+        raise ParseFout("geen enkel tabblad gevonden in de orkestlijst")
 
     jaar = startjaar
     vorige_maand = None
@@ -528,7 +533,7 @@ def parse_orkest(tekst, startjaar=2026):
 
 
 def _splits_blokken(tekst):
-    """Geef (maandnaam, inhoud) per maandblok."""
+    """Geef (maandnaam, inhoud) per tabblad."""
     treffers = list(_BLOK.finditer(tekst))
     blokken = []
     for i, t in enumerate(treffers):
@@ -872,8 +877,10 @@ cellen: `<td class="date"><strong>DD-MM-YYYY</strong><br/>HH:MM</td>`,
 
 **Interfaces:**
 - Gebruikt: `Voorstelling`, `ParseFout`, `normaliseer_plaats`, `normaliseer_tijd`
-- Levert: `parse_website(html: str) -> list[Voorstelling]` met `bron="website"`,
-  `type=None` en `reed2=None` (de site zegt niets over bezetting)
+- Levert: `parse_website(html: str) -> tuple[list[Voorstelling], bool]` — de
+  voorstellingen (met `bron="website"`, `type=None` en `reed2=None`; de site
+  zegt niets over bezetting) plus een vlag die zegt of de pagina *volledig*
+  gelezen kon worden
 
 - [ ] **Stap 1: Leg de fixture vast**
 
@@ -908,10 +915,13 @@ FIXTURE = (Path(__file__).parent / "fixtures" / "website.html").read_text(encodi
 
 class TestParseWebsite(unittest.TestCase):
     def setUp(self):
-        self.vs = parse_website(FIXTURE)
+        self.vs, self.volledig = parse_website(FIXTURE)
 
     def test_leest_alle_voorstellingen(self):
         self.assertEqual(len(self.vs), 3)
+
+    def test_een_volledig_gelezen_pagina_meldt_zich_als_volledig(self):
+        self.assertTrue(self.volledig)
 
     def test_leest_datum_tijd_theater_en_plaats(self):
         v = self.vs[0]
@@ -938,6 +948,29 @@ class TestValidatie(unittest.TestCase):
         # Als de site verbouwd wordt moet dat opvallen, niet stil doorlopen.
         with self.assertRaises(ParseFout):
             parse_website("<html><body><p>Binnenkort meer</p></body></html>")
+
+    def test_een_onleesbare_rij_maakt_de_pagina_onvolledig(self):
+        # Eén rij met de attributen in een andere volgorde matcht niet. De
+        # overige rijen komen gewoon door, maar de vlag zegt dat er iets mist —
+        # anders zou die rij later als "ontbreekt op de site" gemeld worden.
+        kreupel = FIXTURE.replace(
+            '<td class="date" data-label="Datum"><strong>17-01-2027</strong>',
+            '<td data-label="Datum" class="date"><strong>17-01-2027</strong>',
+        )
+        vs, volledig = parse_website(kreupel)
+        self.assertEqual(len(vs), 2)
+        self.assertFalse(volledig)
+
+    def test_een_datumcel_in_een_script_telt_niet_mee(self):
+        # De echte pagina heeft een JavaScript-sjabloon dat op een datumcel
+        # lijkt. Dat mag de pagina niet onvolledig maken.
+        met_script = FIXTURE.replace(
+            "</table>",
+            '</table><script>var rij = \'<td class="date">${datum}</td>\';</script>',
+        )
+        vs, volledig = parse_website(met_script)
+        self.assertEqual(len(vs), 3)
+        self.assertTrue(volledig)
 
 
 if __name__ == "__main__":
@@ -977,15 +1010,33 @@ _RIJ = re.compile(
     re.S | re.I,
 )
 
+# De pagina bevat een <script> met een sjabloon dat op een datumcel lijkt. Dat
+# is geen voorstelling, dus scripts gaan er eerst uit.
+_SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
+
+# Hoeveel datumcellen er in de tabel staan. Wijkt dat af van het aantal
+# gelezen rijen, dan is de pagina maar half begrepen. Bewust soepeler dan
+# _RIJ hierboven: die eist class="date" als eerste attribuut, deze niet. Zou
+# de teller even streng zijn als de noemer, dan telt een onleesbare rij aan
+# beide kanten weg en meldt de vlag altijd "volledig".
+_DATUMCEL = re.compile(r'<td[^>]*?class="date"', re.I)
+
 
 def parse_website(html):
-    """Lees de speellijstpagina en geef alle voorstellingen terug."""
-    treffers = _RIJ.findall(html)
+    """Geef (voorstellingen, volledig) terug.
+
+    `volledig` is False als er datumcellen op de pagina staan die de parser
+    niet heeft kunnen lezen. De aanroeper laat de website-vergelijking dan
+    achterwege in plaats van tientallen verzonnen verschillen te melden.
+    """
+    kaal = _SCRIPT.sub("", html)
+    treffers = _RIJ.findall(kaal)
     if not treffers:
         raise ParseFout(
             "geen voorstellingen gevonden op de pagina; de opmaak van "
             "musicalcats.nl is waarschijnlijk gewijzigd"
         )
+    volledig = len(treffers) == len(_DATUMCEL.findall(kaal))
     voorstellingen = []
     for dag, maand, jaar, tijd, theater, plaats in treffers:
         voorstellingen.append(
@@ -1000,7 +1051,7 @@ def parse_website(html):
                 herkomst=f"{dag}-{maand}-{jaar} {tijd}",
             )
         )
-    return voorstellingen
+    return voorstellingen, volledig
 
 
 def _tekst(fragment):
@@ -1012,7 +1063,7 @@ def _tekst(fragment):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_website -v`
-Verwacht: PASS, 6 tests.
+Verwacht: PASS, 9 tests.
 
 - [ ] **Stap 6: Toets tegen de echte pagina**
 
@@ -1021,8 +1072,8 @@ mkdir -p cache
 curl -sL --max-time 30 "https://musicalcats.nl/waar-wanneer/" -o cache/website.html
 python3 -c "
 from catscheck.website import parse_website
-vs = parse_website(open('cache/website.html', encoding='utf-8').read())
-print(len(vs), 'voorstellingen')
+vs, volledig = parse_website(open('cache/website.html', encoding='utf-8').read())
+print(len(vs), 'voorstellingen; volledig gelezen:', volledig)
 import collections
 for (p, t), n in collections.Counter((v.plaats, v.theater) for v in vs).items():
     print(f'{n:4d}  {p:20s} {t}')
@@ -1030,8 +1081,9 @@ for (p, t), n in collections.Counter((v.plaats, v.theater) for v in vs).items():
 ```
 
 Verwacht: 165 voorstellingen verdeeld over 18 speelplaatsen, van ALMERE tot
-UTRECHT. Wijkt het aantal sterk af, dan is de pagina verbouwd en moet de regex
-mee.
+UTRECHT, en `volledig gelezen: True`. Komt daar False uit, dan staan er
+datumcellen op de pagina die de parser niet begrijpt en moet de regex mee —
+dat is geen reden om de vlag weg te halen.
 
 - [ ] **Stap 7: Commit**
 
@@ -1051,8 +1103,9 @@ git commit -m "feat: parser voor musicalcats.nl"
 
 **Interfaces:**
 - Gebruikt: `AgendaItem`, `ParseFout` uit `catscheck.model`
-- Levert: `parse_agenda(ics: str) -> tuple[list[AgendaItem], int]` — de
-  afspraken plus het aantal overgeslagen herhalende afspraken — en
+- Levert: `parse_agenda(ics: str) -> tuple[list[AgendaItem], int, int]` — de
+  afspraken, het aantal overgeslagen herhalende afspraken, en het aantal
+  afspraken zonder begintijd die niet gelezen konden worden — plus
   `AGENDA_TIJDZONE = ZoneInfo("Europe/Amsterdam")`
 
 Beperking, bewust: afspraken met een `RRULE` (herhalende afspraken) worden
@@ -1118,7 +1171,7 @@ FIXTURE = (Path(__file__).parent / "fixtures" / "agenda.ics").read_text(encoding
 
 class TestParseAgenda(unittest.TestCase):
     def setUp(self):
-        self.items, self.overgeslagen = parse_agenda(FIXTURE)
+        self.items, self.overgeslagen, self.onleesbaar = parse_agenda(FIXTURE)
 
     def test_leest_een_afspraak_met_tijdzone(self):
         item = [i for i in self.items if i.titel == "Cats Almere"][0]
@@ -1149,6 +1202,18 @@ class TestParseAgenda(unittest.TestCase):
     def test_niet_cats_afspraken_blijven_gewoon_staan(self):
         # Filteren op trefwoord gebeurt later, in vergelijk.py.
         self.assertIn("Verjaardag Joost", [i.titel for i in self.items])
+        self.assertEqual(self.onleesbaar, 0)
+
+    def test_afspraak_zonder_begintijd_wordt_geteld_niet_stil_weggegooid(self):
+        # Een VEVENT zonder DTSTART valt niet te plaatsen. Hij mag niet
+        # geruisloos verdwijnen: het rapport moet kunnen melden dat de
+        # controle niet over alles ging.
+        kapot = FIXTURE.replace(
+            "DTSTART;TZID=Europe/Amsterdam:20261020T200000\n", ""
+        )
+        items, herhalend, onleesbaar = parse_agenda(kapot)
+        self.assertEqual(onleesbaar, 1)
+        self.assertNotIn("Verjaardag Joost", [i.titel for i in items])
 
 
 if __name__ == "__main__":
@@ -1181,10 +1246,12 @@ _DATUM = re.compile(r"^(\d{8})$")
 
 
 def parse_agenda(ics):
-    """Geef (afspraken, aantal_overgeslagen) terug.
+    """Geef (afspraken, herhalend_overgeslagen, onleesbaar) terug.
 
-    Herhalende afspraken worden overgeslagen; het aantal wordt teruggegeven
-    zodat het rapport kan vermelden dat er iets niet gekeken is.
+    Herhalende afspraken worden overgeslagen. Een VEVENT zonder DTSTART kan
+    niet geplaatst worden en wordt evenmin gelezen. Beide aantallen komen mee
+    terug, zodat het rapport kan melden dat de controle niet volledig was in
+    plaats van er stilzwijgend overheen te stappen.
     """
     regels = _ontvouw(ics)
     if not any(r.startswith("BEGIN:VCALENDAR") for r in regels):
@@ -1192,6 +1259,7 @@ def parse_agenda(ics):
 
     items = []
     overgeslagen = 0
+    onleesbaar = 0
     huidig = None
     for regel in regels:
         if regel == "BEGIN:VEVENT":
@@ -1204,6 +1272,10 @@ def parse_agenda(ics):
                 overgeslagen += 1
             elif "DTSTART" in huidig:
                 items.append(_maak_item(huidig))
+            else:
+                # Zonder begintijd valt niet te zeggen wanneer dit is. Niet
+                # stil weggooien: tellen, zodat het rapport het kan melden.
+                onleesbaar += 1
             huidig = None
             continue
         if huidig is None:
@@ -1214,7 +1286,7 @@ def parse_agenda(ics):
             huidig[naam] = waarde
             if naam == "DTSTART":
                 huidig["DTSTART_PARAMS"] = sleutel
-    return items, overgeslagen
+    return items, overgeslagen, onleesbaar
 
 
 def _ontvouw(ics):
@@ -1279,7 +1351,7 @@ def _titel(velden):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_agenda -v`
-Verwacht: PASS, 6 tests.
+Verwacht: PASS, 7 tests.
 
 - [ ] **Stap 6: Commit**
 
@@ -1303,7 +1375,7 @@ Het hart van het programma. Alle regels uit het spec komen hier samen.
 - Gebruikt: `Voorstelling`, `AgendaItem`, `Melding`, `Ernst`, `REED2_NAMEN`,
   `SPEEL_TYPES`, `WERK_TYPES`, `NEGEER_TYPES`
 - Levert:
-  - `Instellingen(marge_voor_minuten=180, marge_na_minuten=30, trefwoorden=("cats",), mijn_naam="emiel")`
+  - `Instellingen(marge_voor_minuten=240, marge_na_minuten=30, trefwoorden=("cats",), mijn_naam="emiel")`
   - `vergelijk(orkest, reed2, website, agenda, instellingen, vanaf) -> list[Melding]`
 
 - [ ] **Stap 1: Maak `config/trefwoorden.json`**
@@ -1311,7 +1383,7 @@ Het hart van het programma. Alle regels uit het spec komen hier samen.
 ```json
 {
   "mijn_naam": "emiel",
-  "marge_voor_minuten": 180,
+  "marge_voor_minuten": 240,
   "marge_na_minuten": 30,
   "trefwoorden": ["cats"]
 }
@@ -1434,6 +1506,29 @@ class TestVoorstellingen(unittest.TestCase):
         self.assertEqual([x.ernst for x in m], [Ernst.WEBSITE])
 
 
+class TestOnbekendType(unittest.TestCase):
+    def test_onbekend_type_wordt_gemeld_in_plaats_van_stil_overgeslagen(self):
+        # "OVERSTA DAG" staat echt in de orkestlijst. Zo'n regel valt buiten
+        # elke vergelijking; dat mag hij, maar niet zonder het te zeggen.
+        m = vergelijk(
+            [v("orkest", date(2027, 2, 7), None, None, soort="OVERSTA DAG")],
+            leeg(), leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("OVERSTA DAG", m[0].tekst)
+        self.assertIs(m[0].ernst, Ernst.VERSCHIL)
+
+    def test_onbekend_type_op_jouw_naam_is_kritiek(self):
+        # Een typefout in de typekolom zou anders een voorstelling van Emiel
+        # geruisloos uit de controle laten verdwijnen.
+        m = vergelijk(
+            [v("orkest", date(2027, 2, 7), "20:00", "emiel", soort="REGG")],
+            leeg(), leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+        self.assertIn("REGG", m[0].tekst)
+
+
 class TestAgenda(unittest.TestCase):
     def test_speelbeurt_zonder_agenda_item_is_kritiek(self):
         m = vergelijk(
@@ -1444,12 +1539,12 @@ class TestAgenda(unittest.TestCase):
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("agenda", m[0].tekst.lower())
 
-    def test_agenda_item_drie_uur_voor_aanvang_telt_als_gevonden(self):
+    def test_agenda_item_vier_uur_voor_aanvang_telt_als_gevonden(self):
         m = vergelijk(
             [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
             [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
             leeg(),
-            [AgendaItem(date(2026, 10, 6), time(17, 15), "Cats Almere", "x")],
+            [AgendaItem(date(2026, 10, 6), time(16, 15), "Cats Almere", "x")],
             INST, VANAF,
         )
         self.assertEqual(m, [])
@@ -1463,6 +1558,22 @@ class TestAgenda(unittest.TestCase):
             INST, VANAF,
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+
+    def test_verkeerde_tijd_meldt_de_tijd_en_niet_dat_het_ontbreekt(self):
+        # Staat het item op dezelfde dag maar ver buiten het venster, dan is de
+        # tijd verkeerd genoteerd. Eén melding daarover — niet twee meldingen
+        # die allebei het tegendeel beweren.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 10, 6), time(9, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("09:00", m[0].tekst)
+        self.assertIn("20:15", m[0].tekst)
+        self.assertNotIn("niets in je agenda", m[0].tekst)
 
     def test_agenda_item_na_aanvang_valt_buiten_het_venster(self):
         m = vergelijk(
@@ -1486,13 +1597,59 @@ class TestAgenda(unittest.TestCase):
         self.assertIn("hele dag", m[0].tekst.lower())
 
     def test_cats_agenda_item_zonder_speelbeurt_is_kritiek(self):
+        # De orkestlijst is voor die dag wel ingevuld — iemand anders speelt.
         m = vergelijk(
-            leeg(), leeg(), leeg(),
+            [v("orkest", date(2026, 10, 7), "20:00", "michiel")],
+            leeg(), leeg(),
             [AgendaItem(date(2026, 10, 7), time(17, 0), "Cats Almere", "x")],
             INST, VANAF,
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("geen speelbeurt", m[0].tekst.lower())
+
+    def test_agenda_item_na_het_ingevulde_deel_is_geen_kritiek(self):
+        # De orkestlijst houdt op 06-10-2026 op met Reed 2-namen. Een afspraak
+        # in januari zegt dus niets over of Emiel daar speelt.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:00", "michiel")],
+            leeg(), leeg(),
+            [AgendaItem(date(2027, 1, 20), time(19, 0), "Cats Breda", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.OPEN])
+        self.assertIn("nog niet ingevuld", m[0].tekst)
+
+    def test_twee_shows_op_een_dag_pikken_elkaars_agenda_item_niet_in(self):
+        # Bij 14:00 en 18:00 overlappen de vensters van vier uur. Wie per beurt
+        # het dichtstbijzijnde item pakt, laat de matinee het item van de avond
+        # inpikken en meldt daarna twee dingen die allebei onwaar zijn.
+        m = vergelijk(
+            [v("orkest", date(2026, 11, 7), "14:00", "emiel"),
+             v("orkest", date(2026, 11, 7), "18:00", "emiel")],
+            [v("reed2", date(2026, 11, 7), "14:00", "emiel"),
+             v("reed2", date(2026, 11, 7), "18:00", "emiel")],
+            leeg(),
+            [AgendaItem(date(2026, 11, 7), time(10, 5), "Cats matinee", "a"),
+             AgendaItem(date(2026, 11, 7), time(14, 15), "Cats avond", "b")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+    def test_ontbrekend_item_wijst_de_juiste_voorstelling_aan(self):
+        # Alleen een afspraak voor de avondvoorstelling. Dan moet de matinee
+        # als ontbrekend gemeld worden, niet de avond.
+        m = vergelijk(
+            [v("orkest", date(2027, 5, 21), "15:00", "emiel"),
+             v("orkest", date(2027, 5, 21), "19:45", "emiel")],
+            [v("reed2", date(2027, 5, 21), "15:00", "emiel"),
+             v("reed2", date(2027, 5, 21), "19:45", "emiel")],
+            leeg(),
+            [AgendaItem(date(2027, 5, 21), time(16, 0), "Cats avond", "b")],
+            INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("15:00", m[0].tekst)
+        self.assertIn("niets in je agenda", m[0].tekst)
 
     def test_agenda_item_zonder_trefwoord_wordt_genegeerd(self):
         m = vergelijk(
@@ -1549,7 +1706,7 @@ plaats van als één tijdsverschil.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 from catscheck.model import (
@@ -1565,7 +1722,10 @@ from catscheck.model import (
 @dataclass(frozen=True)
 class Instellingen:
     mijn_naam: str = "emiel"
-    marge_voor_minuten: int = 180
+    # Vier uur vooraf, een half uur erna. Emiel zet een matinee-afspraak
+    # standaard op 12:00; bij een voorstelling om 15:00 zou drie uur precies
+    # de grens zijn, dus daar zit geen speling in.
+    marge_voor_minuten: int = 240
     marge_na_minuten: int = 30
     trefwoorden: tuple = ("cats",)
 
@@ -1573,9 +1733,42 @@ class Instellingen:
 def vergelijk(orkest, reed2, website, agenda, instellingen, vanaf):
     """Geef alle bevindingen terug, ongesorteerd."""
     meldingen = []
+    meldingen += _onbekende_types(orkest, reed2, instellingen, vanaf)
     meldingen += _vergelijk_bronnen(orkest, reed2, instellingen, vanaf)
     meldingen += _vergelijk_website(orkest, website, vanaf)
     meldingen += _vergelijk_agenda(orkest, reed2, agenda, instellingen, vanaf)
+    return meldingen
+
+
+# --- regels die we niet begrijpen ------------------------------------------
+
+BRONNAAM = {
+    "orkest": "de orkestlijst",
+    "reed2": "jullie reed 2-sheet",
+    "website": "musicalcats.nl",
+}
+
+
+def _onbekende_types(orkest, reed2, inst, vanaf):
+    """Meld regels met een type dat in geen enkele verzameling voorkomt.
+
+    Zo'n regel valt buiten elke vergelijking. Zonder deze melding laat een
+    typefout in de typekolom een hele voorstelling verdwijnen — inclusief een
+    naamverschil dat Emiel raakt. Liever een regel die je kunt negeren dan een
+    voorstelling die je nooit ziet.
+    """
+    bekend = SPEEL_TYPES | WERK_TYPES | NEGEER_TYPES
+    meldingen = []
+    for v in list(orkest) + list(reed2):
+        if v.datum < vanaf or v.type is None or v.type in bekend:
+            continue
+        meldingen.append(Melding(
+            Ernst.KRITIEK if v.reed2 == inst.mijn_naam else Ernst.VERSCHIL,
+            v.datum,
+            f"onbekend type {v.type!r} in {BRONNAAM.get(v.bron, v.bron)} — "
+            f"deze voorstelling is niet gecontroleerd",
+            (f"{v.bron}: {v.herkomst}",),
+        ))
     return meldingen
 
 
@@ -1693,46 +1886,128 @@ def _vergelijk_website(orkest, website, vanaf):
 
 def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
     meldingen = []
-    mijn = _mijn_speelbeurten(orkest, reed2, inst, vanaf)
-    cats_items = [
-        i for i in agenda
-        if i.datum >= vanaf
-        and any(t in i.titel.lower() for t in inst.trefwoorden)
-    ]
-    gebruikt = set()
+    # Tot en met deze dag heeft de orkestlijst iets over Reed 2 te zeggen.
+    # Daarna weet de checker niets: een Cats-afspraak daar is geen fout maar
+    # een teken dat de orkestlijst nog ingevuld moet worden. Dat als KRITIEK
+    # melden leert je juist de rode meldingen negeren.
+    ingevuld_tot = max((v.datum for v in orkest if v.reed2), default=None)
 
-    for beurt in mijn:
-        kandidaten = [
-            (n, i) for n, i in enumerate(cats_items)
-            if n not in gebruikt and i.datum == beurt.datum
-            and _past_in_venster(i, beurt, inst)
-        ]
-        if not kandidaten:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, beurt.datum,
-                f"jij staat ingeroosterd maar er staat niets in je agenda — {_omschrijf(beurt)}",
-            ))
-            continue
-        # Op de positie zoeken, niet op waarde: twee identieke agenda-items
-        # zouden anders naar dezelfde plek in de lijst wijzen.
-        nummer, beste = min(kandidaten, key=lambda paar: _afstand(paar[1], beurt))
-        gebruikt.add(nummer)
-        if beste.start is None:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, beurt.datum,
-                f"agenda-item duurt de hele dag, de tijd is dus niet te controleren — "
-                f"{_omschrijf(beurt)}",
-                (f"agenda: {beste.titel}",),
-            ))
+    beurten_per_dag = defaultdict(list)
+    for beurt in _mijn_speelbeurten(orkest, reed2, inst, vanaf):
+        beurten_per_dag[beurt.datum].append(beurt)
 
-    for n, item in enumerate(cats_items):
-        if n not in gebruikt:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, item.datum,
-                f"agenda-item {item.titel!r} hoort bij geen speelbeurt van jou",
-                (f"start {item.start.strftime('%H:%M') if item.start else 'hele dag'}",),
-            ))
+    items_per_dag = defaultdict(list)
+    for item in agenda:
+        if item.datum >= vanaf and any(
+            t in item.titel.lower() for t in inst.trefwoorden
+        ):
+            items_per_dag[item.datum].append(item)
+    for dag in items_per_dag:
+        # Items zonder tijd achteraan: die zijn nergens op te sorteren.
+        items_per_dag[dag].sort(
+            key=lambda i: (i.start is None, i.start or time(0, 0))
+        )
+
+    for dag in sorted(set(beurten_per_dag) | set(items_per_dag)):
+        beurten = beurten_per_dag.get(dag, [])
+        items = items_per_dag.get(dag, [])
+        koppeling = _beste_koppeling(beurten, items, inst)
+        gekoppelde_beurten = {b for b, _ in koppeling}
+        vrij = [j for j in range(len(items)) if j not in {i for _, i in koppeling}]
+
+        for b, j in koppeling:
+            if items[j].start is None:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"agenda-item duurt de hele dag, de tijd is dus niet te "
+                    f"controleren — {_omschrijf(beurten[b])}",
+                    (f"agenda: {items[j].titel}",),
+                ))
+
+        for b, beurt in enumerate(beurten):
+            if b in gekoppelde_beurten:
+                continue
+            if vrij:
+                # Er staat wel iets die dag, maar op een tijd die niet kan
+                # kloppen. Dat is één melding over een verkeerde tijd — niet
+                # een ontbrekende plus een overtollige afspraak, want die
+                # zouden allebei het tegendeel beweren van wat er aan de hand is.
+                j = min(vrij, key=lambda k: _afstand(items[k], beurt))
+                vrij.remove(j)
+                klok = (items[j].start.strftime("%H:%M")
+                        if items[j].start else "de hele dag")
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"agenda-item staat op {klok} maar de voorstelling begint "
+                    f"om {beurt.tijd} — {_omschrijf(beurt)}",
+                    (f"agenda: {items[j].titel}",),
+                ))
+            else:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"jij staat ingeroosterd maar er staat niets in je agenda — "
+                    f"{_omschrijf(beurt)}",
+                ))
+
+        for j in vrij:
+            klok = (items[j].start.strftime("%H:%M")
+                    if items[j].start else "hele dag")
+            if ingevuld_tot is not None and dag <= ingevuld_tot:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"agenda-item {items[j].titel!r} hoort bij geen speelbeurt "
+                    f"van jou",
+                    (f"start {klok}",),
+                ))
+            else:
+                meldingen.append(Melding(
+                    Ernst.OPEN, dag,
+                    f"agenda-item {items[j].titel!r} staat in je agenda, maar de "
+                    f"orkestlijst is voor deze datum nog niet ingevuld",
+                    (f"start {klok}",),
+                ))
     return meldingen
+
+
+def _beste_koppeling(beurten, items, inst):
+    """Koppel de agenda-items van één dag aan de speelbeurten van die dag.
+
+    Geeft een lijst (index_beurt, index_item) terug. Gezocht wordt naar de
+    toewijzing die de meeste beurten binnen hun venster koppelt, en bij
+    gelijke stand naar die met de kleinste totale afwijking.
+
+    Per beurt greedy het dichtstbijzijnde item pakken gaat mis zodra twee
+    vensters elkaar overlappen: de vroegste beurt pikt dan het item in dat bij
+    de latere hoort, waarna er twee meldingen ontstaan die allebei onjuist
+    zijn. Een speeldag telt hooguit een handvol voorstellingen, dus alle
+    varianten aflopen kost niets.
+    """
+    mogelijk = [
+        [j for j in range(len(items)) if _past_in_venster(items[j], beurt, inst)]
+        for beurt in beurten
+    ]
+    beste = []
+    beste_score = None
+
+    def zoek(b, gekozen, bezet, afstand):
+        nonlocal beste, beste_score
+        if b == len(beurten):
+            score = (-len(gekozen), afstand)
+            if beste_score is None or score < beste_score:
+                beste_score, beste = score, list(gekozen)
+            return
+        for j in mogelijk[b]:
+            if j in bezet:
+                continue
+            gekozen.append((b, j))
+            zoek(b + 1, gekozen, bezet | {j},
+                 afstand + _afstand(items[j], beurten[b]))
+            gekozen.pop()
+        # Deze beurt zonder item laten is ook een mogelijkheid.
+        zoek(b + 1, gekozen, bezet, afstand)
+
+    zoek(0, [], frozenset(), timedelta())
+    return beste
 
 
 def _mijn_speelbeurten(orkest, reed2, inst, vanaf):
@@ -1811,7 +2086,7 @@ def _omschrijf(v):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_vergelijk -v`
-Verwacht: PASS, 18 tests.
+Verwacht: PASS, 25 tests.
 
 - [ ] **Stap 6: Commit**
 
@@ -1835,7 +2110,8 @@ rest.
 - Aanmaken: `tests/test_rapport.py`
 
 **Interfaces:**
-- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0) -> str`
+- Levert: `maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0, samenvatten_vanaf=SAMENVATTEN_VANAF, website_onbetrouwbaar=False, onleesbare_afspraken=0) -> str`
+  en de constante `SAMENVATTEN_VANAF = 15`
 - `python3 -m catscheck [--vanaf JJJJ-MM-DD] [--cache MAP] [--config BESTAND]`
 
 - [ ] **Stap 1: Schrijf de falende tests**
@@ -1844,7 +2120,7 @@ Maak `tests/test_rapport.py`:
 
 ```python
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 from catscheck.model import Ernst, Melding
 from catscheck.rapport import maak_rapport
@@ -1877,6 +2153,27 @@ class TestRapport(unittest.TestCase):
         ], VANAF)
         self.assertIn("    detailregel", tekst)
 
+    def test_kritiek_wordt_nooit_samengevat(self):
+        # De belangrijkste groep loop je van boven naar beneden af; die mag
+        # nooit tot frequentietellingen worden ingedikt.
+        veel = [
+            Melding(Ernst.KRITIEK, date(2026, 10, 1) + timedelta(days=i),
+                    f"melding {i}")
+            for i in range(40)
+        ]
+        tekst = maak_rapport(veel, VANAF)
+        self.assertIn("melding 39", tekst)
+        self.assertNotIn("meldingen, van", tekst)
+
+    def test_groep_met_louter_unieke_teksten_wordt_niet_samengevat(self):
+        uniek = [
+            Melding(Ernst.WEBSITE, date(2026, 10, 1) + timedelta(days=i),
+                    f"site wijkt af op dag {i}")
+            for i in range(40)
+        ]
+        tekst = maak_rapport(uniek, VANAF)
+        self.assertIn("site wijkt af op dag 39", tekst)
+
     def test_veel_open_punten_worden_samengevat(self):
         veel = [
             Melding(Ernst.OPEN, date(2026, 12, 17), f"orkestlijst nog leeg bij Reed 2; jullie sheet zegt emiel")
@@ -1902,6 +2199,18 @@ class TestRapport(unittest.TestCase):
 
     def test_de_peildatum_staat_in_de_kop(self):
         self.assertIn("05-09-2026", maak_rapport([], VANAF))
+
+    def test_afspraken_zonder_begintijd_worden_vermeld(self):
+        tekst = maak_rapport([], VANAF, onleesbare_afspraken=2)
+        self.assertIn("2", tekst)
+        self.assertIn("begintijd", tekst.lower())
+
+    def test_onbetrouwbare_website_wordt_bovenaan_gemeld(self):
+        tekst = maak_rapport([], VANAF, website_onbetrouwbaar=True)
+        self.assertIn("musicalcats.nl", tekst)
+        self.assertIn("gedeeltelijk", tekst.lower())
+        # De waarschuwing moet boven de bevindingen staan, niet eronder.
+        self.assertLess(tekst.index("LET OP"), tekst.index("Geen verschillen"))
 
 
 if __name__ == "__main__":
@@ -1933,12 +2242,22 @@ KOPPEN = {
 SAMENVATTEN_VANAF = 15
 
 
-def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0):
+def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
+                 samenvatten_vanaf=SAMENVATTEN_VANAF,
+                 website_onbetrouwbaar=False, onleesbare_afspraken=0):
     regels = [
         "Cats speellijst-checker",
         f"Peildatum: {vanaf.strftime('%d-%m-%Y')} (alles daarvoor is overgeslagen)",
         "",
     ]
+    if website_onbetrouwbaar:
+        # Bovenaan, want het verandert hoe je de rest van het rapport leest.
+        regels += [
+            "LET OP: musicalcats.nl kon maar gedeeltelijk gelezen worden.",
+            "De opmaak van de pagina is waarschijnlijk gewijzigd. De website is",
+            "daarom helemaal buiten de vergelijking gelaten; de rest klopt wel.",
+            "",
+        ]
     if not meldingen:
         regels.append("Geen verschillen gevonden. Alle vier de bronnen zijn het eens.")
     else:
@@ -1951,7 +2270,11 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0):
                 continue
             regels.append(f"{KOPPEN[ernst]}  ({len(groep)})")
             regels.append("-" * len(KOPPEN[ernst]))
-            regels += _toon_groep(groep)
+            # KRITIEK wordt nooit samengevat: dat is juist de groep die je van
+            # boven naar beneden wilt aflopen.
+            regels += _toon_groep(
+                groep, samenvatten_vanaf, mag_samenvatten=ernst is not Ernst.KRITIEK
+            )
             regels.append("")
 
     if overgeslagen_herhalend:
@@ -1959,11 +2282,16 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0):
             f"Let op: {overgeslagen_herhalend} herhalende agenda-afspraken zijn "
             f"niet meegenomen; die worden niet uitgerekend."
         )
+    if onleesbare_afspraken:
+        regels.append(
+            f"Let op: {onleesbare_afspraken} agenda-afspraken misten een "
+            f"begintijd en konden niet gecontroleerd worden."
+        )
     return "\n".join(regels).rstrip() + "\n"
 
 
-def _toon_groep(groep):
-    if len(groep) > SAMENVATTEN_VANAF:
+def _toon_groep(groep, samenvatten_vanaf, mag_samenvatten=True):
+    if mag_samenvatten and len(groep) > samenvatten_vanaf and _herhaalt_zich(groep):
         return _vat_samen(groep)
     regels = []
     for m in groep:
@@ -1971,6 +2299,15 @@ def _toon_groep(groep):
         for detail in m.details:
             regels.append(f"    {detail}")
     return regels
+
+
+def _herhaalt_zich(groep):
+    """Zeg of samenvatten iets oplevert.
+
+    Bij louter unieke teksten geeft samenvatten evenveel regels, maar dan op
+    frequentie gesorteerd in plaats van op datum — slechter dan opsommen.
+    """
+    return len({m.tekst for m in groep}) * 2 <= len(groep)
 
 
 def _vat_samen(groep):
@@ -1991,7 +2328,7 @@ def _vat_samen(groep):
 - [ ] **Stap 4: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_rapport -v`
-Verwacht: PASS, 8 tests.
+Verwacht: PASS, 12 tests.
 
 - [ ] **Stap 5: Schrijf `catscheck/__main__.py`**
 
@@ -2012,7 +2349,7 @@ from pathlib import Path
 from catscheck.agenda import parse_agenda
 from catscheck.model import ParseFout
 from catscheck.orkest import parse_orkest
-from catscheck.rapport import maak_rapport
+from catscheck.rapport import SAMENVATTEN_VANAF, maak_rapport
 from catscheck.reed2 import parse_reed2
 from catscheck.vergelijk import Instellingen, vergelijk
 from catscheck.website import parse_website
@@ -2026,14 +2363,30 @@ def main(argv=None):
     p.add_argument("--alles", action="store_true", help="vat lange groepen niet samen")
     args = p.parse_args(argv)
 
-    vanaf = date.fromisoformat(args.vanaf) if args.vanaf else date.today()
-    inst = _lees_instellingen(args.config)
+    # Ook deze twee lezen invoer van de gebruiker. Zonder vangnet leveren ze
+    # een Engelse traceback met afsluitcode 1 op, en dat is precies de code die
+    # "er zijn verschillen gevonden" betekent. Een script kan een crash dan
+    # niet van een geslaagde controle onderscheiden.
+    try:
+        vanaf = date.fromisoformat(args.vanaf) if args.vanaf else date.today()
+    except ValueError:
+        print(
+            f"Ongeldige peildatum {args.vanaf!r}; schrijf hem als JJJJ-MM-DD.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        inst = _lees_instellingen(args.config)
+    except (json.JSONDecodeError, OSError) as fout:
+        print(f"Kan {args.config} niet lezen: {fout}", file=sys.stderr)
+        return 2
 
     try:
         orkest = parse_orkest(_lees(args.cache / "orkest.txt"))
         reed2 = parse_reed2(_lees(args.cache / "reed2.csv"))
-        website = parse_website(_lees(args.cache / "website.html"))
-        agenda, overgeslagen = parse_agenda(_lees(args.cache / "agenda.ics"))
+        website, website_volledig = parse_website(_lees(args.cache / "website.html"))
+        agenda, overgeslagen, onleesbaar = parse_agenda(_lees(args.cache / "agenda.ics"))
     except ParseFout as fout:
         print(f"De controle kon niet worden uitgevoerd: {fout}", file=sys.stderr)
         return 2
@@ -2045,12 +2398,17 @@ def main(argv=None):
         )
         return 2
 
-    if args.alles:
-        import catscheck.rapport as rapportmodule
-        rapportmodule.SAMENVATTEN_VANAF = 10 ** 9
-
-    meldingen = vergelijk(orkest, reed2, website, agenda, inst, vanaf)
-    print(maak_rapport(meldingen, vanaf, overgeslagen))
+    # Is de pagina maar half gelezen, dan levert vergelijken met de website
+    # alleen verzonnen verschillen op. De rest van de controle gaat wel door.
+    meldingen = vergelijk(
+        orkest, reed2, website if website_volledig else [], agenda, inst, vanaf
+    )
+    print(maak_rapport(
+        meldingen, vanaf, overgeslagen,
+        samenvatten_vanaf=10 ** 9 if args.alles else SAMENVATTEN_VANAF,
+        website_onbetrouwbaar=not website_volledig,
+        onleesbare_afspraken=onleesbaar,
+    ))
     return 1 if meldingen else 0
 
 
@@ -2064,7 +2422,7 @@ def _lees_instellingen(pad):
     rauw = json.loads(Path(pad).read_text(encoding="utf-8"))
     return Instellingen(
         mijn_naam=rauw.get("mijn_naam", "emiel"),
-        marge_voor_minuten=rauw.get("marge_voor_minuten", 180),
+        marge_voor_minuten=rauw.get("marge_voor_minuten", 240),
         marge_na_minuten=rauw.get("marge_na_minuten", 30),
         trefwoorden=tuple(t.lower() for t in rauw.get("trefwoorden", ["cats"])),
     )
@@ -2074,25 +2432,101 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
+- [ ] **Stap 5b: Schrijf `tests/test_main.py`**
+
+De commandoregel heeft nog geen enkele test, terwijl juist daar de
+afsluitcodes worden bepaald waar een script op afgaat.
+
+```python
+import io
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+
+from catscheck.__main__ import main
+
+FIXTURES = str(Path(__file__).parent / "fixtures")
+
+
+def draai(argv):
+    """Draai de commandoregel en geef (afsluitcode, uitvoer, fouten) terug."""
+    uit, fout = io.StringIO(), io.StringIO()
+    with redirect_stdout(uit), redirect_stderr(fout):
+        code = main(argv)
+    return code, uit.getvalue(), fout.getvalue()
+
+
+class TestAfsluitcodes(unittest.TestCase):
+    def test_rapport_op_de_fixtures(self):
+        code, uit, _ = draai(["--cache", FIXTURES, "--vanaf", "2026-09-01"])
+        self.assertIn("Cats speellijst-checker", uit)
+        self.assertIn(code, (0, 1))
+
+    def test_ontbrekende_cachemap_geeft_code_2(self):
+        with tempfile.TemporaryDirectory() as leeg:
+            code, _, fout = draai(["--cache", leeg])
+        self.assertEqual(code, 2)
+        self.assertIn("ontbreekt", fout)
+
+    def test_ongeldige_peildatum_geeft_code_2_en_geen_traceback(self):
+        # Code 1 zou "er zijn verschillen gevonden" betekenen; een crash mag
+        # daar niet mee samenvallen.
+        code, _, fout = draai(["--cache", FIXTURES, "--vanaf", "geen-datum"])
+        self.assertEqual(code, 2)
+        self.assertIn("peildatum", fout.lower())
+        self.assertNotIn("Traceback", fout)
+
+    def test_kapotte_configuratie_geeft_code_2_en_geen_traceback(self):
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text("{dit is geen json", encoding="utf-8")
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Draai: `python3 -m unittest tests.test_main -v`
+Verwacht: PASS, 4 tests.
+
 - [ ] **Stap 6: Draai alle tests**
 
 Draai: `python3 -m unittest discover -s tests -v`
-Verwacht: PASS, 60 tests, geen fouten.
+Verwacht: PASS, 85 tests, geen fouten.
 
 - [ ] **Stap 7: Draai op de echte bronnen**
 
-Met `cache/orkest.txt`, `cache/reed2.csv` en `cache/website.html` uit de vorige
-taken en een lege `cache/agenda.ics`:
+Alle vier de cachebestanden staan er al, inclusief een echte
+`cache/agenda.ics`. **Overschrijf die niet** — het is een opgehaalde kopie van
+een privéagenda en er staat geen tweede exemplaar van.
 
 ```bash
-printf 'BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR\n' > cache/agenda.ics
 python3 -m catscheck --vanaf 2026-09-01
 ```
 
-Verwacht: een rapport dat onder VERSCHIL de tijdsverschillen op 11, 18, 24 en
-25 oktober noemt, onder WEBSITE de plaatsverschillen rond 20 tot en met 23 mei
-2027 (orkestlijst Den Bosch, site Den Haag) en de ontbrekende DeLaMar-reeks, en
-onder KRITIEK alle speelbeurten van Emiel omdat de agenda nog leeg is.
+Verwacht, op grond van wat er eerder handmatig in de bronnen is nagekeken:
+
+- onder VERSCHIL de tijdsverschillen tussen orkestlijst en reed 2-sheet op
+  11, 18, 24 en 25 oktober 2026;
+- onder WEBSITE het plaatsverschil rond 20 tot en met 23 mei 2027 (orkestlijst
+  Den Bosch, site Den Haag) en de DeLaMar-reeks die niet op de site staat;
+- onder KRITIEK drie speeldagen zonder Cats-afspraak in de agenda
+  (21-10-2026, 20-11-2026, 13-12-2026) en drie dagen met twee voorstellingen
+  waar één afspraak "Cats 2x" staat (7 en 14 november, 5 december);
+- onder NOG IN TE VULLEN ruim honderd lege Reed 2-cellen vanaf half december,
+  samengevat tot één regel in plaats van uitgeschreven.
+
+Wijkt het rapport hier sterk van af, meld dat dan — het betekent dat een van de
+onderdelen anders werkt dan bedoeld, niet dat de verwachting bijgesteld moet
+worden.
 
 - [ ] **Stap 8: Commit**
 
@@ -2118,24 +2552,43 @@ zijn. De twee Drive-bestanden haalt Claude op met alleen-lees-tools.
 ```bash
 #!/usr/bin/env bash
 # Haalt de website en de agenda op naar cache/. Alleen lezen.
+#
+# Elke download gaat eerst naar een tijdelijk bestand en wordt pas op zijn
+# plek gezet als hij compleet blijkt. `curl -o` kapt het doelbestand namelijk
+# af voordat er iets binnenkomt: valt de verbinding halverwege weg, dan blijft
+# er een halve agenda achter. Die parseert gewoon, zonder foutmelding, met
+# minder afspraken erin — en levert een rapport op vol meldingen dat er
+# voorstellingen in de agenda ontbreken die er wel degelijk in staan.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 mkdir -p cache
 
+# In cache/ zelf, zodat het verplaatsen een hernoeming op dezelfde schijf is
+# en dus in één ondeelbare stap gebeurt.
+werkmap="$(mktemp -d ./cache/.ophalen.XXXXXX)"
+trap 'rm -rf "$werkmap"' EXIT
+
 echo "musicalcats.nl ophalen..."
-curl -sSL --max-time 30 "https://musicalcats.nl/waar-wanneer/" -o cache/website.html
+if curl -sSL --max-time 30 "https://musicalcats.nl/waar-wanneer/" \
+        -o "$werkmap/website.html" \
+   && grep -q 'class="date"' "$werkmap/website.html"; then
+  mv "$werkmap/website.html" cache/website.html
+else
+  echo "website ophalen mislukt; cache/website.html blijft ongewijzigd" >&2
+fi
 
 if [[ -f config/ical_url.txt ]]; then
   echo "agenda ophalen..."
   # De URL zelf verschijnt nooit in de uitvoer; hij is een geheim.
   url="$(tr -d '[:space:]' < config/ical_url.txt)"
-  if ! curl -sSL --max-time 30 "$url" -o cache/agenda.ics; then
-    echo "agenda ophalen mislukt; controleer de URL in config/ical_url.txt" >&2
-    exit 1
-  fi
-  if ! head -1 cache/agenda.ics | grep -q "BEGIN:VCALENDAR"; then
-    echo "de agenda-URL gaf geen iCal-bestand terug; is hij nog geldig?" >&2
+  if curl -sSL --max-time 60 "$url" -o "$werkmap/agenda.ics" \
+     && head -1 "$werkmap/agenda.ics" | grep -q "BEGIN:VCALENDAR" \
+     && tail -5 "$werkmap/agenda.ics" | grep -q "END:VCALENDAR"; then
+    mv "$werkmap/agenda.ics" cache/agenda.ics
+  else
+    echo "agenda ophalen mislukt of onvolledig; cache/agenda.ics blijft" \
+         "ongewijzigd. Controleer de URL in config/ical_url.txt." >&2
     exit 1
   fi
 else
@@ -2153,8 +2606,27 @@ Maak hem uitvoerbaar: `chmod +x scripts/ophalen.sh`
 ./scripts/ophalen.sh && ls -la cache/
 ```
 
-Verwacht: `cache/website.html` van ruim 400 kB. Zonder `config/ical_url.txt`
-een waarschuwing op stderr en afsluitcode 0.
+Verwacht: `cache/website.html` van ruim 400 kB en een verse `cache/agenda.ics`.
+Zonder `config/ical_url.txt` een waarschuwing op stderr en afsluitcode 0.
+
+Toets ook dat een mislukte download niets kapotmaakt. Deze test raakt
+`config/ical_url.txt` niet aan — hij doet precies wat het script doet, maar dan
+met een adres dat niet bestaat:
+
+```bash
+md5sum cache/agenda.ics
+werkmap="$(mktemp -d ./cache/.test.XXXXXX)"
+curl -sSL --max-time 5 "https://example.invalid/geen-agenda" \
+     -o "$werkmap/agenda.ics" || echo "curl faalde, zoals bedoeld"
+head -1 "$werkmap/agenda.ics" 2>/dev/null | grep -q "BEGIN:VCALENDAR" \
+  || echo "validatie faalde, dus geen mv naar cache/ — zoals bedoeld"
+rm -rf "$werkmap"
+md5sum cache/agenda.ics
+```
+
+Verwacht: beide meldingen verschijnen en de md5 van `cache/agenda.ics` is vóór
+en na identiek. Dat is de hele winst van deze opzet: een kapotte download komt
+nooit verder dan de tijdelijke map.
 
 - [ ] **Stap 3: Schrijf de skill**
 
