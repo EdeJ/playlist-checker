@@ -1276,12 +1276,12 @@ Verwacht: PASS
 ```bash
 grep -rn "orkest.txt\|stempels.json\|read_file_content\|download_file_content" \
   --include=*.py --include=*.sh --include=*.md --include=*.json . \
-  | grep -v "docs/superpowers/plans/2026-09-05" \
-  | grep -v "docs/superpowers/specs/2026-09-0"
+  | grep -v "docs/superpowers/"
 ```
 
-Verwacht: geen enkele regel. De twee uitgesloten mappen zijn geschiedenis en
-horen te blijven staan zoals ze zijn.
+Verwacht: geen enkele regel. `docs/superpowers/` is uitgesloten omdat daar de
+ontwerpen en dit plan zelf staan: die citeren de oude namen met opzet, als
+beschrijving van de situatie die we juist aan het vervangen zijn.
 
 - [ ] **Stap 4: Meld de decembervondst aan Emiel**
 
