@@ -1,8 +1,7 @@
 """Commandoregel voor de Cats speellijst-checker.
 
 Leest uitsluitend lokale bestanden uit de cachemap. Doet zelf geen enkel
-netwerkverzoek: het ophalen van de bronnen gebeurt door Claude, met alleen-
-lees-tools.
+netwerkverzoek: het ophalen van de bronnen gebeurt door scripts/ophalen.sh.
 """
 
 import argparse
@@ -48,7 +47,7 @@ def main(argv=None):
         return 2
 
     try:
-        orkest = parse_orkest(_lees(args.cache / "orkest.txt"))
+        orkest = parse_orkest(_lees_bytes(args.cache / "orkest.xlsx"))
         reed2 = parse_reed2(_lees(args.cache / "reed2.csv"))
         website, website_volledig = parse_website(_lees(args.cache / "website.html"))
         agenda, overgeslagen, onleesbaar = parse_agenda(_lees(args.cache / "agenda.ics"))
@@ -58,7 +57,7 @@ def main(argv=None):
     except FileNotFoundError as fout:
         print(
             f"Bronbestand ontbreekt: {fout.filename}\n"
-            f"Vraag Claude de bronnen op te halen (/cats-check).",
+            f"Draai eerst ./scripts/ophalen.sh.",
             file=sys.stderr,
         )
         return 2
@@ -79,6 +78,11 @@ def main(argv=None):
 
 def _lees(pad):
     return Path(pad).read_text(encoding="utf-8")
+
+
+def _lees_bytes(pad):
+    """De orkestlijst is een xlsx en dus geen tekst."""
+    return Path(pad).read_bytes()
 
 
 def _lees_instellingen(pad):
