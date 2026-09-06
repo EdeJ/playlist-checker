@@ -29,21 +29,31 @@ def lees_tabbladen(data):
             "en staat er een inlogpagina in de cache?"
         ) from None
 
-    with bestand as z:
-        namen = set(z.namelist())
-        if "xl/workbook.xml" not in namen:
-            raise ParseFout("de orkestlijst mist xl/workbook.xml; geen geldige xlsx")
-        gedeeld = _lees_gedeelde_teksten(z, namen)
-        doelen = _lees_relaties(z, namen)
-        tabbladen = []
-        for blad in ET.fromstring(z.read("xl/workbook.xml")).iter(_HOOFD + "sheet"):
-            if blad.get("state", "visible") != "visible":
-                continue
-            pad = doelen.get(blad.get(_REL + "id"))
-            if pad is None or pad not in namen:
-                continue
-            tabbladen.append((blad.get("name", ""), _lees_rijen(z.read(pad), gedeeld)))
-        return tabbladen
+    try:
+        with bestand as z:
+            namen = set(z.namelist())
+            if "xl/workbook.xml" not in namen:
+                raise ParseFout("de orkestlijst mist xl/workbook.xml; geen geldige xlsx")
+            gedeeld = _lees_gedeelde_teksten(z, namen)
+            doelen = _lees_relaties(z, namen)
+            tabbladen = []
+            for blad in ET.fromstring(z.read("xl/workbook.xml")).iter(_HOOFD + "sheet"):
+                if blad.get("state", "visible") != "visible":
+                    continue
+                pad = doelen.get(blad.get(_REL + "id"))
+                if pad is None or pad not in namen:
+                    continue
+                tabbladen.append((blad.get("name", ""), _lees_rijen(z.read(pad), gedeeld)))
+            return tabbladen
+    except (ET.ParseError, KeyError) as fout:
+        # Een geldige zip met een halve sharedStrings.xml of sheet*.xml erin
+        # geeft hier een ParseError of KeyError, geen BadZipFile. Zonder dit
+        # vangnet komt dat als Engelse traceback met afsluitcode 1 naar
+        # buiten — dezelfde code als "er zijn meldingen".
+        raise ParseFout(
+            f"de orkestlijst bevat xml die niet te lezen is ({fout}); is het "
+            "bestand halverwege afgekapt of beschadigd?"
+        ) from None
 
 
 def _lees_gedeelde_teksten(z, namen):
@@ -91,7 +101,16 @@ def _celwaarde(cel, gedeeld):
         try:
             return gedeeld[int(waarde.text)]
         except (ValueError, IndexError):
-            return ""
+            # Elke tekstcel in het echte bestand is een gedeelde tekst. Een
+            # verwijzing naar een index die er niet is, is geen lege cel maar
+            # een onbegrepen bestand — stilzwijgend "" teruggeven zou precies
+            # de bug reproduceren die deze checker moet voorkomen: een
+            # kapotte bron die eruitziet als "nog niet ingevuld".
+            raise ParseFout(
+                f"cel {cel.get('r', '?')} verwijst naar gedeelde tekst "
+                f"{waarde.text!r}, die niet bestaat; is xl/sharedStrings.xml "
+                "beschadigd of afgekapt?"
+            ) from None
     return waarde.text
 
 

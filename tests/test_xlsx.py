@@ -1,8 +1,22 @@
+import io
 import unittest
+import zipfile
 
 from catscheck.model import ParseFout
 from catscheck.xlsx import lees_tabbladen
 from tests.xlsxhulp import kolomnaam, maak_xlsx
+
+
+def _herbouw_met_wijziging(data, naam, nieuwe_inhoud):
+    """Geef `data` terug met het zip-lid `naam` vervangen door nieuwe_inhoud."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        leden = {n: z.read(n) for n in z.namelist()}
+    leden[naam] = nieuwe_inhoud
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        for n, inhoud in leden.items():
+            z.writestr(n, inhoud)
+    return buffer.getvalue()
 
 
 class TestKolomnaam(unittest.TestCase):
@@ -69,14 +83,44 @@ class TestOnleesbaar(unittest.TestCase):
         self.assertIn("xlsx", str(ctx.exception))
 
     def test_zip_zonder_werkmap_geeft_een_parsefout(self):
-        import io
-        import zipfile
-
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as z:
             z.writestr("iets.txt", "geen xlsx")
         with self.assertRaises(ParseFout):
             lees_tabbladen(buffer.getvalue())
+
+    def test_kapotte_gedeelde_tekst_verwijzing_geeft_een_parsefout(self):
+        # Elke tekstcel in het echte bestand is een gedeelde tekst. Raakt
+        # sharedStrings.xml gedeeltelijk stuk of verschuift een index, dan
+        # verwijst een cel naar een tekst die er niet is — dat is geen lege
+        # cel maar een onbegrepen bestand, en mag niet als "" doorglijden.
+        data = maak_xlsx({"Oktober": [["Emiel"]]})
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            sheet = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        kapot = sheet.replace("<v>0</v>", "<v>99</v>")
+        self.assertNotEqual(kapot, sheet)
+        data = _herbouw_met_wijziging(data, "xl/worksheets/sheet1.xml", kapot.encode("utf-8"))
+        with self.assertRaises(ParseFout):
+            lees_tabbladen(data)
+
+    def test_kapotte_sharedstrings_xml_geeft_een_parsefout(self):
+        # Een geldige zip met een halve sharedStrings.xml erin gaf voorheen
+        # een xml.etree.ElementTree.ParseError, geen ParseFout: een Engelse
+        # traceback en afsluitcode 1 in plaats van 2.
+        data = maak_xlsx({"Oktober": [["Emiel"]]})
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            kapot = z.read("xl/sharedStrings.xml")[:20]
+        data = _herbouw_met_wijziging(data, "xl/sharedStrings.xml", kapot)
+        with self.assertRaises(ParseFout):
+            lees_tabbladen(data)
+
+    def test_kapot_tabblad_geeft_een_parsefout(self):
+        data = maak_xlsx({"Oktober": [["Emiel"]]})
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            kapot = z.read("xl/worksheets/sheet1.xml")[:30]
+        data = _herbouw_met_wijziging(data, "xl/worksheets/sheet1.xml", kapot)
+        with self.assertRaises(ParseFout):
+            lees_tabbladen(data)
 
 
 if __name__ == "__main__":
