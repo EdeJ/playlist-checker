@@ -2363,8 +2363,24 @@ def main(argv=None):
     p.add_argument("--alles", action="store_true", help="vat lange groepen niet samen")
     args = p.parse_args(argv)
 
-    vanaf = date.fromisoformat(args.vanaf) if args.vanaf else date.today()
-    inst = _lees_instellingen(args.config)
+    # Ook deze twee lezen invoer van de gebruiker. Zonder vangnet leveren ze
+    # een Engelse traceback met afsluitcode 1 op, en dat is precies de code die
+    # "er zijn verschillen gevonden" betekent. Een script kan een crash dan
+    # niet van een geslaagde controle onderscheiden.
+    try:
+        vanaf = date.fromisoformat(args.vanaf) if args.vanaf else date.today()
+    except ValueError:
+        print(
+            f"Ongeldige peildatum {args.vanaf!r}; schrijf hem als JJJJ-MM-DD.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        inst = _lees_instellingen(args.config)
+    except (json.JSONDecodeError, OSError) as fout:
+        print(f"Kan {args.config} niet lezen: {fout}", file=sys.stderr)
+        return 2
 
     try:
         orkest = parse_orkest(_lees(args.cache / "orkest.txt"))
@@ -2416,10 +2432,75 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
+- [ ] **Stap 5b: Schrijf `tests/test_main.py`**
+
+De commandoregel heeft nog geen enkele test, terwijl juist daar de
+afsluitcodes worden bepaald waar een script op afgaat.
+
+```python
+import io
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+
+from catscheck.__main__ import main
+
+FIXTURES = str(Path(__file__).parent / "fixtures")
+
+
+def draai(argv):
+    """Draai de commandoregel en geef (afsluitcode, uitvoer, fouten) terug."""
+    uit, fout = io.StringIO(), io.StringIO()
+    with redirect_stdout(uit), redirect_stderr(fout):
+        code = main(argv)
+    return code, uit.getvalue(), fout.getvalue()
+
+
+class TestAfsluitcodes(unittest.TestCase):
+    def test_rapport_op_de_fixtures(self):
+        code, uit, _ = draai(["--cache", FIXTURES, "--vanaf", "2026-09-01"])
+        self.assertIn("Cats speellijst-checker", uit)
+        self.assertIn(code, (0, 1))
+
+    def test_ontbrekende_cachemap_geeft_code_2(self):
+        with tempfile.TemporaryDirectory() as leeg:
+            code, _, fout = draai(["--cache", leeg])
+        self.assertEqual(code, 2)
+        self.assertIn("ontbreekt", fout)
+
+    def test_ongeldige_peildatum_geeft_code_2_en_geen_traceback(self):
+        # Code 1 zou "er zijn verschillen gevonden" betekenen; een crash mag
+        # daar niet mee samenvallen.
+        code, _, fout = draai(["--cache", FIXTURES, "--vanaf", "geen-datum"])
+        self.assertEqual(code, 2)
+        self.assertIn("peildatum", fout.lower())
+        self.assertNotIn("Traceback", fout)
+
+    def test_kapotte_configuratie_geeft_code_2_en_geen_traceback(self):
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text("{dit is geen json", encoding="utf-8")
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Draai: `python3 -m unittest tests.test_main -v`
+Verwacht: PASS, 4 tests.
+
 - [ ] **Stap 6: Draai alle tests**
 
 Draai: `python3 -m unittest discover -s tests -v`
-Verwacht: PASS, 81 tests, geen fouten.
+Verwacht: PASS, 85 tests, geen fouten.
 
 - [ ] **Stap 7: Draai op de echte bronnen**
 
