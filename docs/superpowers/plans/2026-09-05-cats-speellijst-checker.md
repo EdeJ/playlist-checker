@@ -1597,13 +1597,27 @@ class TestAgenda(unittest.TestCase):
         self.assertIn("hele dag", m[0].tekst.lower())
 
     def test_cats_agenda_item_zonder_speelbeurt_is_kritiek(self):
+        # De orkestlijst is voor die dag wel ingevuld — iemand anders speelt.
         m = vergelijk(
-            leeg(), leeg(), leeg(),
+            [v("orkest", date(2026, 10, 7), "20:00", "michiel")],
+            leeg(), leeg(),
             [AgendaItem(date(2026, 10, 7), time(17, 0), "Cats Almere", "x")],
             INST, VANAF,
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("geen speelbeurt", m[0].tekst.lower())
+
+    def test_agenda_item_na_het_ingevulde_deel_is_geen_kritiek(self):
+        # De orkestlijst houdt op 06-10-2026 op met Reed 2-namen. Een afspraak
+        # in januari zegt dus niets over of Emiel daar speelt.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:00", "michiel")],
+            leeg(), leeg(),
+            [AgendaItem(date(2027, 1, 20), time(19, 0), "Cats Breda", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.OPEN])
+        self.assertIn("nog niet ingevuld", m[0].tekst)
 
     def test_twee_shows_op_een_dag_pikken_elkaars_agenda_item_niet_in(self):
         # Bij 14:00 en 18:00 overlappen de vensters van vier uur. Wie per beurt
@@ -1872,6 +1886,12 @@ def _vergelijk_website(orkest, website, vanaf):
 
 def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
     meldingen = []
+    # Tot en met deze dag heeft de orkestlijst iets over Reed 2 te zeggen.
+    # Daarna weet de checker niets: een Cats-afspraak daar is geen fout maar
+    # een teken dat de orkestlijst nog ingevuld moet worden. Dat als KRITIEK
+    # melden leert je juist de rode meldingen negeren.
+    ingevuld_tot = max((v.datum for v in orkest if v.reed2), default=None)
+
     beurten_per_dag = defaultdict(list)
     for beurt in _mijn_speelbeurten(orkest, reed2, inst, vanaf):
         beurten_per_dag[beurt.datum].append(beurt)
@@ -1930,11 +1950,22 @@ def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
                 ))
 
         for j in vrij:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, dag,
-                f"agenda-item {items[j].titel!r} hoort bij geen speelbeurt van jou",
-                (f"start {items[j].start.strftime('%H:%M') if items[j].start else 'hele dag'}",),
-            ))
+            klok = (items[j].start.strftime("%H:%M")
+                    if items[j].start else "hele dag")
+            if ingevuld_tot is not None and dag <= ingevuld_tot:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"agenda-item {items[j].titel!r} hoort bij geen speelbeurt "
+                    f"van jou",
+                    (f"start {klok}",),
+                ))
+            else:
+                meldingen.append(Melding(
+                    Ernst.OPEN, dag,
+                    f"agenda-item {items[j].titel!r} staat in je agenda, maar de "
+                    f"orkestlijst is voor deze datum nog niet ingevuld",
+                    (f"start {klok}",),
+                ))
     return meldingen
 
 
@@ -2055,7 +2086,7 @@ def _omschrijf(v):
 - [ ] **Stap 5: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_vergelijk -v`
-Verwacht: PASS, 24 tests.
+Verwacht: PASS, 25 tests.
 
 - [ ] **Stap 6: Commit**
 
@@ -2089,10 +2120,10 @@ Maak `tests/test_rapport.py`:
 
 ```python
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 from catscheck.model import Ernst, Melding
-from catscheck.rapport import SAMENVATTEN_VANAF, maak_rapport
+from catscheck.rapport import maak_rapport
 
 VANAF = date(2026, 9, 5)
 
@@ -2121,6 +2152,27 @@ class TestRapport(unittest.TestCase):
             Melding(Ernst.KRITIEK, date(2026, 10, 1), "kop", ("detailregel",)),
         ], VANAF)
         self.assertIn("    detailregel", tekst)
+
+    def test_kritiek_wordt_nooit_samengevat(self):
+        # De belangrijkste groep loop je van boven naar beneden af; die mag
+        # nooit tot frequentietellingen worden ingedikt.
+        veel = [
+            Melding(Ernst.KRITIEK, date(2026, 10, 1) + timedelta(days=i),
+                    f"melding {i}")
+            for i in range(40)
+        ]
+        tekst = maak_rapport(veel, VANAF)
+        self.assertIn("melding 39", tekst)
+        self.assertNotIn("meldingen, van", tekst)
+
+    def test_groep_met_louter_unieke_teksten_wordt_niet_samengevat(self):
+        uniek = [
+            Melding(Ernst.WEBSITE, date(2026, 10, 1) + timedelta(days=i),
+                    f"site wijkt af op dag {i}")
+            for i in range(40)
+        ]
+        tekst = maak_rapport(uniek, VANAF)
+        self.assertIn("site wijkt af op dag 39", tekst)
 
     def test_veel_open_punten_worden_samengevat(self):
         veel = [
@@ -2218,7 +2270,11 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
                 continue
             regels.append(f"{KOPPEN[ernst]}  ({len(groep)})")
             regels.append("-" * len(KOPPEN[ernst]))
-            regels += _toon_groep(groep, samenvatten_vanaf)
+            # KRITIEK wordt nooit samengevat: dat is juist de groep die je van
+            # boven naar beneden wilt aflopen.
+            regels += _toon_groep(
+                groep, samenvatten_vanaf, mag_samenvatten=ernst is not Ernst.KRITIEK
+            )
             regels.append("")
 
     if overgeslagen_herhalend:
@@ -2234,8 +2290,8 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
     return "\n".join(regels).rstrip() + "\n"
 
 
-def _toon_groep(groep, samenvatten_vanaf):
-    if len(groep) > samenvatten_vanaf:
+def _toon_groep(groep, samenvatten_vanaf, mag_samenvatten=True):
+    if mag_samenvatten and len(groep) > samenvatten_vanaf and _herhaalt_zich(groep):
         return _vat_samen(groep)
     regels = []
     for m in groep:
@@ -2243,6 +2299,15 @@ def _toon_groep(groep, samenvatten_vanaf):
         for detail in m.details:
             regels.append(f"    {detail}")
     return regels
+
+
+def _herhaalt_zich(groep):
+    """Zeg of samenvatten iets oplevert.
+
+    Bij louter unieke teksten geeft samenvatten evenveel regels, maar dan op
+    frequentie gesorteerd in plaats van op datum — slechter dan opsommen.
+    """
+    return len({m.tekst for m in groep}) * 2 <= len(groep)
 
 
 def _vat_samen(groep):
@@ -2263,7 +2328,7 @@ def _vat_samen(groep):
 - [ ] **Stap 4: Draai de tests en stel vast dat ze slagen**
 
 Draai: `python3 -m unittest tests.test_rapport -v`
-Verwacht: PASS, 10 tests.
+Verwacht: PASS, 12 tests.
 
 - [ ] **Stap 5: Schrijf `catscheck/__main__.py`**
 
@@ -2284,7 +2349,7 @@ from pathlib import Path
 from catscheck.agenda import parse_agenda
 from catscheck.model import ParseFout
 from catscheck.orkest import parse_orkest
-from catscheck.rapport import maak_rapport
+from catscheck.rapport import SAMENVATTEN_VANAF, maak_rapport
 from catscheck.reed2 import parse_reed2
 from catscheck.vergelijk import Instellingen, vergelijk
 from catscheck.website import parse_website
@@ -2354,7 +2419,7 @@ if __name__ == "__main__":
 - [ ] **Stap 6: Draai alle tests**
 
 Draai: `python3 -m unittest discover -s tests -v`
-Verwacht: PASS, 78 tests, geen fouten.
+Verwacht: PASS, 81 tests, geen fouten.
 
 - [ ] **Stap 7: Draai op de echte bronnen**
 
