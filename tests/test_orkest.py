@@ -57,7 +57,7 @@ class TestParseOrkest(unittest.TestCase):
 
     def test_delamar_typefout_wordt_genormaliseerd(self):
         wo31 = [v for v in self.vs if v.datum == date(2027, 3, 31)][0]
-        self.assertEqual(wo31.plaats, "AMSTERDAM DELAMAR")
+        self.assertEqual(wo31.plaats, "AMSTERDAM")
         self.assertEqual(wo31.reed2, "michiel")
 
     def test_mamma_mia_blokken_worden_overgeslagen(self):

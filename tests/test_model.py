@@ -28,9 +28,19 @@ class TestNormaliseerPlaats(unittest.TestCase):
         self.assertEqual(normaliseer_plaats("Almere"), "ALMERE")
 
     def test_delamar_typefout_wordt_rechtgezet(self):
-        # De orkestlijst schrijft "Amterdam DLM" met een typefout.
-        self.assertEqual(normaliseer_plaats("Amterdam DLM"), "AMSTERDAM DELAMAR")
-        self.assertEqual(normaliseer_plaats("Amsterdam DLM"), "AMSTERDAM DELAMAR")
+        # De orkestlijst schrijft "Amterdam DLM" met een typefout, als enige
+        # cel voor stad plus theater. De reed 2-sheet schrijft de stad apart
+        # als "AMSTERDAM" en het theater in een eigen kolom, dus moet deze
+        # waarde naar diezelfde "AMSTERDAM" normaliseren.
+        self.assertEqual(normaliseer_plaats("Amterdam DLM"), "AMSTERDAM")
+        self.assertEqual(normaliseer_plaats("Amsterdam DLM"), "AMSTERDAM")
+
+    def test_delamar_alias_komt_overeen_met_amsterdam_uit_de_reed2_sheet(self):
+        # Dit is de kern van de fix: zonder deze gelijkheid meldt de checker
+        # elke DeLaMar-dag ten onrechte als een plaatsverschil.
+        self.assertEqual(
+            normaliseer_plaats("Amterdam DLM"), normaliseer_plaats("AMSTERDAM")
+        )
 
     def test_gewoon_amsterdam_blijft_amsterdam(self):
         self.assertEqual(normaliseer_plaats("Amsterdam"), "AMSTERDAM")

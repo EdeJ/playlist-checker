@@ -38,12 +38,14 @@ NEGEER_TYPES = frozenset({"BOUW", "VRIJ"})
 # Plaatsnamen die per bron anders geschreven worden. Sleutel is de
 # genormaliseerde (lowercase, getrimde) vorm.
 PLAATS_ALIAS = {
-    "amterdam dlm": "AMSTERDAM DELAMAR",   # typefout in de orkestlijst
-    "amsterdam dlm": "AMSTERDAM DELAMAR",
-    "amsterdam delamar": "AMSTERDAM DELAMAR",
-    "delamar": "AMSTERDAM DELAMAR",
-    "'s-hertogenbosch": "DEN BOSCH",
-    "s-hertogenbosch": "DEN BOSCH",
+    # De orkestlijst schrijft de stad en het theater in één cel ("Amterdam
+    # DLM", met typefout). De reed 2-sheet schrijft alleen de stad
+    # ("AMSTERDAM") en noemt het theater apart in de Theater-kolom. Zonder
+    # deze alias normaliseerde de orkestlijst-waarde naar iets dat nooit
+    # gelijk kon zijn aan wat de reed 2-sheet noteert, en werd elke
+    # DeLaMar-dag ten onrechte als "plaats verschilt" gemeld.
+    "amterdam dlm": "AMSTERDAM",
+    "amsterdam dlm": "AMSTERDAM",
 }
 
 # Markeringen die in de sheets "leeg" betekenen.
