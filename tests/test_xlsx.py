@@ -45,6 +45,20 @@ class TestLeesTabbladen(unittest.TestCase):
         (_, rijen), = lees_tabbladen(data)
         self.assertEqual(rijen[0][26], "BIJZITTERS")
 
+    def test_getalcellen_zonder_t_attribuut_worden_gelezen(self):
+        # Het echte bestand bewaart dagnummer en tijd als kale <v>, zonder
+        # t-attribuut. Die tak mag niet verward worden met tekst.
+        data = maak_xlsx({"Oktober": [["6.0", "0.84375"]]})
+        (_, rijen), = lees_tabbladen(data)
+        self.assertEqual(rijen[0], ["6.0", "0.84375"])
+
+    def test_inline_string_cel_wordt_ook_gelezen(self):
+        # Het echte bestand gebruikt dit nooit (zie maak_xlsx), maar de tak
+        # bestaat nog in xlsx.py en moet dus gedekt blijven.
+        data = maak_xlsx({"Oktober": [["Emiel"]]}, inline=True)
+        (_, rijen), = lees_tabbladen(data)
+        self.assertEqual(rijen[0], ["Emiel"])
+
 
 class TestOnleesbaar(unittest.TestCase):
     def test_geen_zip_geeft_een_parsefout(self):
