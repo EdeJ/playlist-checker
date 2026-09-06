@@ -43,9 +43,20 @@ een bron niet gelezen kon worden.
 **Stap 3 — toelichten**
 
 Druk het rapport af en licht de KRITIEK-meldingen toe. Zeg er per melding bij
-wat Emiel eraan kan doen: zelf zijn agenda bijwerken, het met Christof en
-Michiel opnemen, of het bij Ryanne melden omdat de orkestlijst aangepast moet
-worden. Dat laatste doet Emiel zelf — jij past niets aan.
+wat Emiel eraan kan doen:
+
+- **Agenda-meldingen** — zelf zijn agenda bijwerken.
+- **Tijd- en plaatsverschillen** — zelf rechtzetten in de orkestlijst. Emiel
+  heeft daar schrijfrechten; stuur hem hier niet naar Ryanne. Dat de lijst
+  van Ryanne is en als waarheid geldt, zegt iets over eigenaarschap, niet
+  over toegang.
+- **Verschillen over wíé speelt** — eerst uitzoeken, niet aanpassen. Staat er
+  in de orkestlijst een andere naam dan in de reed 2-sheet, dan spreken twee
+  mensen elkaar tegen; dat gaat Emiel met Christof en Michiel na voordat er
+  iets verandert. Eenzijdig overschrijven wist andermans kant van het
+  meningsverschil.
+
+Aanpassen doet Emiel altijd zelf — jij past niets aan.
 
 ## Welk model hiervoor nodig is
 
