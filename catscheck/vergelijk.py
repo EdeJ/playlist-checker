@@ -186,6 +186,12 @@ def _vergelijk_website(orkest, website, vanaf):
 
 def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
     meldingen = []
+    # Tot en met deze dag heeft de orkestlijst iets over Reed 2 te zeggen.
+    # Daarna weet de checker niets: een Cats-afspraak daar is geen fout maar
+    # een teken dat de orkestlijst nog ingevuld moet worden. Dat als KRITIEK
+    # melden leert je juist de rode meldingen negeren.
+    ingevuld_tot = max((v.datum for v in orkest if v.reed2), default=None)
+
     beurten_per_dag = defaultdict(list)
     for beurt in _mijn_speelbeurten(orkest, reed2, inst, vanaf):
         beurten_per_dag[beurt.datum].append(beurt)
@@ -244,11 +250,22 @@ def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
                 ))
 
         for j in vrij:
-            meldingen.append(Melding(
-                Ernst.KRITIEK, dag,
-                f"agenda-item {items[j].titel!r} hoort bij geen speelbeurt van jou",
-                (f"start {items[j].start.strftime('%H:%M') if items[j].start else 'hele dag'}",),
-            ))
+            klok = (items[j].start.strftime("%H:%M")
+                    if items[j].start else "hele dag")
+            if ingevuld_tot is not None and dag <= ingevuld_tot:
+                meldingen.append(Melding(
+                    Ernst.KRITIEK, dag,
+                    f"agenda-item {items[j].titel!r} hoort bij geen speelbeurt "
+                    f"van jou",
+                    (f"start {klok}",),
+                ))
+            else:
+                meldingen.append(Melding(
+                    Ernst.OPEN, dag,
+                    f"agenda-item {items[j].titel!r} staat in je agenda, maar de "
+                    f"orkestlijst is voor deze datum nog niet ingevuld",
+                    (f"start {klok}",),
+                ))
     return meldingen
 
 

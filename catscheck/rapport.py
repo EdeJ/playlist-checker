@@ -43,7 +43,11 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
                 continue
             regels.append(f"{KOPPEN[ernst]}  ({len(groep)})")
             regels.append("-" * len(KOPPEN[ernst]))
-            regels += _toon_groep(groep, samenvatten_vanaf)
+            # KRITIEK wordt nooit samengevat: dat is juist de groep die je van
+            # boven naar beneden wilt aflopen.
+            regels += _toon_groep(
+                groep, samenvatten_vanaf, mag_samenvatten=ernst is not Ernst.KRITIEK
+            )
             regels.append("")
 
     if overgeslagen_herhalend:
@@ -59,8 +63,8 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
     return "\n".join(regels).rstrip() + "\n"
 
 
-def _toon_groep(groep, samenvatten_vanaf):
-    if len(groep) > samenvatten_vanaf:
+def _toon_groep(groep, samenvatten_vanaf, mag_samenvatten=True):
+    if mag_samenvatten and len(groep) > samenvatten_vanaf and _herhaalt_zich(groep):
         return _vat_samen(groep)
     regels = []
     for m in groep:
@@ -68,6 +72,15 @@ def _toon_groep(groep, samenvatten_vanaf):
         for detail in m.details:
             regels.append(f"    {detail}")
     return regels
+
+
+def _herhaalt_zich(groep):
+    """Zeg of samenvatten iets oplevert.
+
+    Bij louter unieke teksten geeft samenvatten evenveel regels, maar dan op
+    frequentie gesorteerd in plaats van op datum — slechter dan opsommen.
+    """
+    return len({m.tekst for m in groep}) * 2 <= len(groep)
 
 
 def _vat_samen(groep):

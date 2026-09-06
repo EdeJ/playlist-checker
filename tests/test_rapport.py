@@ -1,8 +1,8 @@
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 from catscheck.model import Ernst, Melding
-from catscheck.rapport import SAMENVATTEN_VANAF, maak_rapport
+from catscheck.rapport import maak_rapport
 
 VANAF = date(2026, 9, 5)
 
@@ -31,6 +31,27 @@ class TestRapport(unittest.TestCase):
             Melding(Ernst.KRITIEK, date(2026, 10, 1), "kop", ("detailregel",)),
         ], VANAF)
         self.assertIn("    detailregel", tekst)
+
+    def test_kritiek_wordt_nooit_samengevat(self):
+        # De belangrijkste groep loop je van boven naar beneden af; die mag
+        # nooit tot frequentietellingen worden ingedikt.
+        veel = [
+            Melding(Ernst.KRITIEK, date(2026, 10, 1) + timedelta(days=i),
+                    f"melding {i}")
+            for i in range(40)
+        ]
+        tekst = maak_rapport(veel, VANAF)
+        self.assertIn("melding 39", tekst)
+        self.assertNotIn("meldingen, van", tekst)
+
+    def test_groep_met_louter_unieke_teksten_wordt_niet_samengevat(self):
+        uniek = [
+            Melding(Ernst.WEBSITE, date(2026, 10, 1) + timedelta(days=i),
+                    f"site wijkt af op dag {i}")
+            for i in range(40)
+        ]
+        tekst = maak_rapport(uniek, VANAF)
+        self.assertIn("site wijkt af op dag 39", tekst)
 
     def test_veel_open_punten_worden_samengevat(self):
         veel = [

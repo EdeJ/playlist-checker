@@ -201,13 +201,27 @@ class TestAgenda(unittest.TestCase):
         self.assertIn("hele dag", m[0].tekst.lower())
 
     def test_cats_agenda_item_zonder_speelbeurt_is_kritiek(self):
+        # De orkestlijst is voor die dag wel ingevuld — iemand anders speelt.
         m = vergelijk(
-            leeg(), leeg(), leeg(),
+            [v("orkest", date(2026, 10, 7), "20:00", "michiel")],
+            leeg(), leeg(),
             [AgendaItem(date(2026, 10, 7), time(17, 0), "Cats Almere", "x")],
             INST, VANAF,
         )
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("geen speelbeurt", m[0].tekst.lower())
+
+    def test_agenda_item_na_het_ingevulde_deel_is_geen_kritiek(self):
+        # De orkestlijst houdt op 06-10-2026 op met Reed 2-namen. Een afspraak
+        # in januari zegt dus niets over of Emiel daar speelt.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:00", "michiel")],
+            leeg(), leeg(),
+            [AgendaItem(date(2027, 1, 20), time(19, 0), "Cats Breda", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.OPEN])
+        self.assertIn("nog niet ingevuld", m[0].tekst)
 
     def test_twee_shows_op_een_dag_pikken_elkaars_agenda_item_niet_in(self):
         # Bij 14:00 en 18:00 overlappen de vensters van vier uur. Wie per beurt
