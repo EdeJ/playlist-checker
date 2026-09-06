@@ -52,6 +52,15 @@ class TestValidatie(unittest.TestCase):
         with self.assertRaises(ParseFout):
             parse_reed2("alleen maar rommel,zonder,kop\n1,2,3\n")
 
+    def test_regel_met_inhoud_maar_zonder_datum_geeft_een_parsefout(self):
+        # De rij heeft wel inhoud (Type en Wie zijn ingevuld) maar de
+        # Speeldatum-cel is leeg. Dat is geen lege dag maar een structurele
+        # verrassing, en die hoort niet stil overgeslagen te worden.
+        kapot = FIXTURE + "\n,TO,20:00,Kunstlinie,ALMERE,Emiel,,,\n"
+        with self.assertRaises(ParseFout) as ctx:
+            parse_reed2(kapot)
+        self.assertIn("datum", str(ctx.exception).lower())
+
 
 if __name__ == "__main__":
     unittest.main()

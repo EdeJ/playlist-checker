@@ -31,7 +31,12 @@ def parse_reed2(csv_tekst):
             continue
         ruwe_datum = _cel(rij, idx["datum"])
         if not ruwe_datum:
-            continue
+            # De regel hierboven ving al de echt lege rijen af. Komen we hier
+            # toch, dan heeft de rij inhoud maar geen speeldatum — een
+            # structurele verrassing, geen lege dag. Elke andere misvorming
+            # in deze parser gooit een ParseFout; stil overslaan zou hier
+            # geen uitzondering moeten zijn.
+            raise ParseFout(f"regel {nummer} heeft inhoud maar geen speeldatum")
         dag = _maak_datum(ruwe_datum, nummer)
         voorstellingen.append(
             Voorstelling(
