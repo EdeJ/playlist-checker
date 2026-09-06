@@ -5,7 +5,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from catscheck.__main__ import main
+from catscheck.__main__ import _lees_instellingen, main
 
 FIXTURES = str(Path(__file__).parent / "fixtures")
 
@@ -83,6 +83,43 @@ class TestAfsluitcodes(unittest.TestCase):
             kapot.write_text(
                 json.dumps({"marge_voor_minuten": "vier uur"}), encoding="utf-8"
             )
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
+    def test_niet_tekst_mijn_naam_geeft_code_2_en_geen_traceback(self):
+        # {"mijn_naam": null} (of elk ander niet-tekst-type) laat elke
+        # naamvergelijking mislukken, want overal wordt met een
+        # genormaliseerde (lowercase) tekenreeks vergeleken.
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text(json.dumps({"mijn_naam": None}), encoding="utf-8")
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
+    def test_mijn_naam_wordt_genormaliseerd_naar_kleine_letters(self):
+        # "Emiel" met hoofdletter matcht anders nergens meer, want elke
+        # naamvergelijking elders gebeurt met de genormaliseerde (lowercase)
+        # tekst uit normaliseer_naam().
+        with tempfile.TemporaryDirectory() as map_:
+            pad = Path(map_) / "trefwoorden.json"
+            pad.write_text(json.dumps({"mijn_naam": "Emiel"}), encoding="utf-8")
+            inst = _lees_instellingen(pad)
+        self.assertEqual(inst.mijn_naam, "emiel")
+
+    def test_lege_trefwoordenlijst_geeft_code_2_in_plaats_van_stille_uitschakeling(self):
+        # Een lege lijst matcht geen enkele afspraak meer, waardoor de hele
+        # agendacontrole zonder signaal uitgeschakeld raakt.
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text(json.dumps({"trefwoorden": []}), encoding="utf-8")
             code, _, fout = draai(
                 ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
             )

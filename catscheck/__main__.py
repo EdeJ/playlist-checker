@@ -102,6 +102,17 @@ def _lees_instellingen(pad):
     trefwoorden = rauw.get("trefwoorden", ["cats"])
     if not isinstance(trefwoorden, list) or not all(isinstance(t, str) for t in trefwoorden):
         raise ParseFout("'trefwoorden' in {} moet een lijst met tekst zijn".format(pad))
+    if not trefwoorden:
+        # Een lege lijst schakelt de agendacontrole zonder enig signaal uit:
+        # geen enkele afspraak matcht dan nog, dus geen enkele KRITIEK-melding
+        # over een missend agenda-item komt nog boven water.
+        raise ParseFout(f"'trefwoorden' in {pad} mag niet leeg zijn")
+    mijn_naam = rauw.get("mijn_naam", "emiel")
+    if not isinstance(mijn_naam, str):
+        # Namen worden overal genormaliseerd vergeleken (lowercase); een
+        # niet-tekst hier — of een verkeerde hoofdlettering die vergeten
+        # wordt genormaliseerd — laat elke naamvergelijking mislukken.
+        raise ParseFout(f"'mijn_naam' in {pad} moet tekst zijn")
     try:
         marge_voor = int(rauw.get("marge_voor_minuten", 240))
         marge_na = int(rauw.get("marge_na_minuten", 30))
@@ -110,7 +121,7 @@ def _lees_instellingen(pad):
             f"'marge_voor_minuten' en 'marge_na_minuten' in {pad} moeten getallen zijn"
         ) from None
     return Instellingen(
-        mijn_naam=rauw.get("mijn_naam", "emiel"),
+        mijn_naam=mijn_naam.lower(),
         marge_voor_minuten=marge_voor,
         marge_na_minuten=marge_na,
         trefwoorden=tuple(t.lower() for t in trefwoorden),
