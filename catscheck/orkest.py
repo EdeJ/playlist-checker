@@ -68,12 +68,22 @@ def parse_orkest(tekst, startjaar=2026):
         vorige_maand = maand
 
         kop, body = _splits_kop(inhoud)
+        rijen = list(_splits_rijen(body))
         if "Reed 2" not in kop:
-            # Geen Reed 2-kolom: dit blok hoort bij een andere productie.
-            continue
+            if not rijen:
+                # Geen datarijen en geen Reed 2-kop: niets in dit blok dat
+                # gemist kan worden.
+                continue
+            # Wel datarijen, maar geen Reed 2-kolom in de kop: dit tabblad is
+            # kapot of verschoven. Stilzwijgend overslaan zou een hele maand
+            # laten verdwijnen zonder dat iemand het merkt.
+            raise ParseFout(
+                f"blok {maandnaam} heeft datarijen maar geen kolom 'Reed 2' "
+                f"in de kop; is de kop verschoven of ontbreekt hij?"
+            )
         reed2_index = kop.index("Reed 2")
 
-        for weekdag, dagnummer, velden, ruw in _splits_rijen(body):
+        for weekdag, dagnummer, velden, ruw in rijen:
             dag = _maak_datum(jaar, maand, dagnummer, weekdag, ruw)
             soort = velden[3].strip() if len(velden) > 3 else ""
             if not soort:

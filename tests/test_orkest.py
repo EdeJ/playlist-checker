@@ -77,10 +77,36 @@ class TestValidatie(unittest.TestCase):
         self.assertIn("weekdag", str(ctx.exception).lower())
 
     def test_ontbrekende_reed2_kolom_geeft_een_parsefout(self):
+        # Alleen het Oktober-blok raakt zijn kop kwijt; de andere blokken
+        # blijven intact en hebben dus nog steeds datarijen. Vroeger stripte
+        # deze test de kop van ALLE tabbladen, waardoor hij per ongeluk het
+        # "geen enkele voorstelling gevonden"-pad testte in plaats van het
+        # per-tabblad-pad.
+        kapot = FIXTURE.replace(
+            "Reed 2,Overnachten Reed 2", "Riet 2,Overnachten Riet 2", 1
+        )
+        with self.assertRaises(ParseFout) as ctx:
+            parse_orkest(kapot)
+        self.assertIn("Oktober", str(ctx.exception))
+
+    def test_ontbrekende_reed2_kolom_in_alle_blokken_geeft_ook_een_parsefout(self):
+        # Verliezen alle tabbladen hun kop, dan stopt de parser op het eerste
+        # blok dat hij tegenkomt (Oktober) — met dezelfde, specifieke melding.
         kapot = FIXTURE.replace("Reed 2,Overnachten Reed 2", "Riet 2,Overnachten Riet 2")
         with self.assertRaises(ParseFout) as ctx:
             parse_orkest(kapot)
-        self.assertIn("Reed 2", str(ctx.exception))
+        self.assertIn("Oktober", str(ctx.exception))
+
+    def test_blok_zonder_datarijen_en_zonder_reed2_kop_wordt_stil_overgeslagen(self):
+        # Een tabblad zonder enige datarij levert niets op om te missen, dus
+        # daarvoor blijft overslaan zonder foutmelding de juiste keuze.
+        tekst = (
+            "Oktober OKTOBER,Reed 2\n"
+            "Di,6,20:15,TO,Almere\n"
+            "November November,Riet 2\n"
+        )
+        vs = parse_orkest(tekst)
+        self.assertEqual(len(vs), 1)
 
 
 if __name__ == "__main__":
