@@ -1,7 +1,7 @@
 # Cats speellijst-checker — ontwerp
 
 Datum: 2026-09-05
-Status: ontwerp goedgekeurd, nog niet gebouwd
+Status: gebouwd (2026-09-06)
 
 ## Doel
 
@@ -89,7 +89,7 @@ scripts/
 Voorstelling(
     datum,        # date, altijd met jaar
     tijd,         # "20:00" of None bij dagen zonder aanvangstijd
-    type,         # TO, PREM, REG, VP, S-OPT, MON, BESL, BOUW, VRIJ
+    type,         # TO, PREM, REG, VP, S-OPT, MON, BESL, BOUW, VRIJ, OVERSTA DAG
     plaats,       # "ALMERE" — genormaliseerd naar hoofdletters
     theater,      # "Kunstlinie" of None (orkestlijst noemt geen theater)
     reed2,        # "Emiel" / "Christof" / "Coen" / "Michiel" / None

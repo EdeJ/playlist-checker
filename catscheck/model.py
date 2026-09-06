@@ -98,7 +98,7 @@ class Voorstelling:
 
     datum: date
     tijd: str | None          # "20:15", of None bij dagen zonder aanvangstijd
-    type: str | None          # TO, PREM, REG, VP, S-OPT, MON, BESL, BOUW, VRIJ
+    type: str | None          # TO, PREM, REG, VP, S-OPT, MON, BESL, BOUW, VRIJ, OVERSTA DAG
     plaats: str | None        # genormaliseerd, hoofdletters
     theater: str | None       # de orkestlijst noemt geen theater
     reed2: str | None         # genormaliseerde naam, of None
