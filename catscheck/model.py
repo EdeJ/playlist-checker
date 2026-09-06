@@ -32,8 +32,9 @@ SPEEL_TYPES = frozenset({"TO", "PREM", "REG", "VP", "S-OPT"})
 # Werkdagen zonder publiek waar wel iemand moet zijn.
 WERK_TYPES = frozenset({"MON", "BESL"})
 
-# Dagen waarop niemand van reed 2 hoeft te spelen.
-NEGEER_TYPES = frozenset({"BOUW", "VRIJ"})
+# Dagen waarop niemand van reed 2 hoeft te spelen, inclusief de reisdag
+# waarop de productie naar een ander theater verhuist.
+NEGEER_TYPES = frozenset({"BOUW", "VRIJ", "OVERSTA DAG"})
 
 # Plaatsnamen die per bron anders geschreven worden. Sleutel is de
 # genormaliseerde (lowercase, getrimde) vorm.

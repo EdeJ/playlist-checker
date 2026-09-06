@@ -167,15 +167,28 @@ class TestVoorstellingen(unittest.TestCase):
 
 class TestOnbekendType(unittest.TestCase):
     def test_onbekend_type_wordt_gemeld_in_plaats_van_stil_overgeslagen(self):
-        # "OVERSTA DAG" staat echt in de orkestlijst. Zo'n regel valt buiten
-        # elke vergelijking; dat mag hij, maar niet zonder het te zeggen.
+        # Een echt onbekend type (geen NEGEER_TYPES, geen SPEEL_TYPES, geen
+        # WERK_TYPES) valt buiten elke vergelijking. Dat mag, maar niet
+        # zonder het te zeggen.
+        m = vergelijk(
+            [v("orkest", date(2027, 2, 7), None, None, soort="REGG")],
+            leeg(), leeg(), leeg(), INST, VANAF,
+        )
+        self.assertEqual(len(m), 1)
+        self.assertIn("REGG", m[0].tekst)
+        self.assertIs(m[0].ernst, Ernst.VERSCHIL)
+
+    def test_oversta_dag_wordt_genegeerd_net_als_bouw_en_vrij(self):
+        # "OVERSTA DAG" is de reisdag waarop de productie naar een ander
+        # theater verhuist: niemand van reed 2 speelt die dag. Zonder deze
+        # regel in NEGEER_TYPES levert hij een "onbekend type"-melding op
+        # (zie de test hierboven, met een écht onbekend type) — met de regel
+        # levert hij niets op, exact zoals BOUW en VRIJ.
         m = vergelijk(
             [v("orkest", date(2027, 2, 7), None, None, soort="OVERSTA DAG")],
             leeg(), leeg(), leeg(), INST, VANAF,
         )
-        self.assertEqual(len(m), 1)
-        self.assertIn("OVERSTA DAG", m[0].tekst)
-        self.assertIs(m[0].ernst, Ernst.VERSCHIL)
+        self.assertEqual(m, [])
 
     def test_leeg_type_bij_ingevulde_reed2_naam_wordt_gemeld(self):
         # Prevention: dit bestaat nog niet in echte data, maar een reed
