@@ -66,15 +66,21 @@ voor elke sessie in dit project, ook toekomstige.
 
 Vier parsers, één vergelijker. Elke bron heeft zijn eigen eigenaardigheden, dus
 elke bron krijgt zijn eigen parser die naar hetzelfde platte formaat vertaalt.
+Gebouwd is dit als het `catscheck`-pakket met één ophaalscript, niet als losse
+scripts per stap:
 
 ```
+catscheck/
+  model.py       gedeeld model en normalisatie (Voorstelling, AgendaItem, ...)
+  orkest.py      cache/orkest.txt   → genormaliseerde voorstellingen
+  reed2.py       cache/reed2.csv    → genormaliseerde voorstellingen
+  website.py     cache/website.html → genormaliseerde voorstellingen
+  agenda.py      cache/agenda.ics   → agenda-items
+  vergelijk.py   vier lijsten       → bevindingen
+  rapport.py     bevindingen        → Nederlandse terminaltekst
+  __main__.py    commandoregel, aan te roepen als `python3 -m catscheck`
 scripts/
-  fetch_agenda.sh     geheime iCal-URL ophalen naar cache/agenda.ics
-  parse_orkest.py     cache/orkest.txt   → genormaliseerde voorstellingen
-  parse_reed2.py      cache/reed2.csv    → genormaliseerde voorstellingen
-  parse_website.py    cache/website.html → genormaliseerde voorstellingen
-  parse_agenda.py     cache/agenda.ics   → agenda-items
-  compare.py          vier lijsten       → rapport
+  ophalen.sh     musicalcats.nl en de geheime iCal-URL ophalen naar cache/
 ```
 
 ### Genormaliseerd formaat
