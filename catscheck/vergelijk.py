@@ -50,17 +50,33 @@ BRONNAAM = {
 
 
 def _onbekende_types(orkest, reed2, inst, vanaf):
-    """Meld regels met een type dat in geen enkele verzameling voorkomt.
+    """Meld regels met een type dat in geen enkele verzameling voorkomt, en
+    regels met een ingevulde Reed 2-naam maar een LEEG type.
 
     Zo'n regel valt buiten elke vergelijking. Zonder deze melding laat een
-    typefout in de typekolom een hele voorstelling verdwijnen — inclusief een
-    naamverschil dat Emiel raakt. Liever een regel die je kunt negeren dan een
-    voorstelling die je nooit ziet.
+    typefout — of een leeg gelaten typekolom, waarschijnlijker een
+    invoerfoutje dan een verkeerd gespeld type — een hele voorstelling
+    verdwijnen, inclusief een naamverschil dat Emiel raakt. Liever een regel
+    die je kunt negeren dan een voorstelling die je nooit ziet.
     """
     bekend = SPEEL_TYPES | WERK_TYPES | NEGEER_TYPES
     meldingen = []
     for v in list(orkest) + list(reed2):
-        if v.datum < vanaf or v.type is None or v.type in bekend:
+        if v.datum < vanaf:
+            continue
+        if v.type is None:
+            if v.reed2 is None:
+                # Een lege rij zonder naam is gewoon een lege rij.
+                continue
+            meldingen.append(Melding(
+                Ernst.KRITIEK if v.reed2 == inst.mijn_naam else Ernst.VERSCHIL,
+                v.datum,
+                f"leeg type bij Reed 2 = {v.reed2} in {BRONNAAM.get(v.bron, v.bron)} — "
+                f"deze voorstelling is niet gecontroleerd",
+                (f"{v.bron}: {v.herkomst}",),
+            ))
+            continue
+        if v.type in bekend:
             continue
         meldingen.append(Melding(
             Ernst.KRITIEK if v.reed2 == inst.mijn_naam else Ernst.VERSCHIL,

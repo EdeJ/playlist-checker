@@ -177,6 +177,31 @@ class TestOnbekendType(unittest.TestCase):
         self.assertIn("OVERSTA DAG", m[0].tekst)
         self.assertIs(m[0].ernst, Ernst.VERSCHIL)
 
+    def test_leeg_type_bij_ingevulde_reed2_naam_wordt_gemeld(self):
+        # Prevention: dit bestaat nog niet in echte data, maar een reed
+        # 2-rij met naam en datum en een blanco Type-kolom viel eerder
+        # overal onderdoor: _per_dag negeerde hem (None zit niet in
+        # SPEEL_TYPES) en _onbekende_types sloeg hem ook over (v.type is
+        # None). Dat maakte deze fout de waarschijnlijkste van de twee.
+        m = vergelijk(
+            [v("orkest", date(2027, 2, 7), "20:00", "emiel")],
+            [v("reed2", date(2027, 2, 7), "20:00", "emiel", soort=None)],
+            leeg(), leeg(), INST, VANAF,
+        )
+        leeg_type = [x for x in m if "leeg type" in x.tekst]
+        self.assertEqual(len(leeg_type), 1)
+        self.assertIs(leeg_type[0].ernst, Ernst.KRITIEK)
+
+    def test_leeg_type_bij_collega_is_alleen_verschil(self):
+        m = vergelijk(
+            leeg(),
+            [v("reed2", date(2027, 2, 7), "20:00", "christof", soort=None)],
+            leeg(), leeg(), INST, VANAF,
+        )
+        leeg_type = [x for x in m if "leeg type" in x.tekst]
+        self.assertEqual(len(leeg_type), 1)
+        self.assertIs(leeg_type[0].ernst, Ernst.VERSCHIL)
+
     def test_onbekend_type_op_jouw_naam_is_kritiek(self):
         # Een typefout in de typekolom zou anders een voorstelling van Emiel
         # geruisloos uit de controle laten verdwijnen.
