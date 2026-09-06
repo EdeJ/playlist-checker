@@ -28,8 +28,24 @@ def main(argv=None):
     p.add_argument("--alles", action="store_true", help="vat lange groepen niet samen")
     args = p.parse_args(argv)
 
-    vanaf = date.fromisoformat(args.vanaf) if args.vanaf else date.today()
-    inst = _lees_instellingen(args.config)
+    # Ook deze twee lezen invoer van de gebruiker. Zonder vangnet leveren ze
+    # een Engelse traceback met afsluitcode 1 op, en dat is precies de code die
+    # "er zijn verschillen gevonden" betekent. Een script kan een crash dan
+    # niet van een geslaagde controle onderscheiden.
+    try:
+        vanaf = date.fromisoformat(args.vanaf) if args.vanaf else date.today()
+    except ValueError:
+        print(
+            f"Ongeldige peildatum {args.vanaf!r}; schrijf hem als JJJJ-MM-DD.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        inst = _lees_instellingen(args.config)
+    except (json.JSONDecodeError, OSError) as fout:
+        print(f"Kan {args.config} niet lezen: {fout}", file=sys.stderr)
+        return 2
 
     try:
         orkest = parse_orkest(_lees(args.cache / "orkest.txt"))
