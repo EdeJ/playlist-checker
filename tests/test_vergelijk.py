@@ -57,6 +57,61 @@ class TestBezetting(unittest.TestCase):
         )
         self.assertEqual([x.ernst for x in m], [Ernst.OPEN])
 
+    def test_orkestlijst_zegt_vrij_waar_reed2_sheet_een_voorstelling_heeft(self):
+        # Verifieerd geval: de reed 2-sheet noemt een voorstelling op een dag
+        # die in de orkestlijst niet als voorstelling voorkomt (VRIJ, dus
+        # gefilterd door NEGEER_TYPES) — binnen het overlap van beide bronnen
+        # moet dit als verschil gemeld worden, niet stil verdwijnen.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), None, None, soort="VRIJ", plaats=None)],
+            [v("reed2", date(2026, 10, 22), "20:00", "emiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        verschillen = [x for x in m if "niet in de orkestlijst" in x.tekst]
+        self.assertEqual(len(verschillen), 1)
+        self.assertIs(verschillen[0].ernst, Ernst.VERSCHIL)
+
+    def test_reed2_sheet_mist_een_voorstelling_die_de_orkestlijst_wel_heeft(self):
+        # Beide bronnen hebben een gedeeld ankerpunt (6 oktober) zodat hun
+        # bereik overlapt; 22 oktober staat alleen in de orkestlijst.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:00", "emiel"),
+             v("orkest", date(2026, 10, 22), "20:00", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:00", "emiel"),
+             v("reed2", date(2026, 10, 23), "20:00", "emiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        verschillen = [x for x in m if "niet in jullie reed 2-sheet" in x.tekst]
+        self.assertEqual(len(verschillen), 1)
+        self.assertEqual(verschillen[0].datum, date(2026, 10, 22))
+        self.assertIs(verschillen[0].ernst, Ernst.VERSCHIL)
+
+    def test_reed2_rij_met_naam_en_datum_maar_leeg_type_telt_mee_als_verschil(self):
+        # Verifieerd geval: een reed 2-rij met datum en naam maar een blanco
+        # Type-kolom. Zo'n rij valt uit _per_dag (None zit niet in
+        # SPEEL_TYPES), dus de orkestlijst-voorstelling die dag lijkt uit de
+        # reed 2-sheet te ontbreken. Dat wordt hier apart afgevangen door
+        # Important 6 (onbekende_types); hier alleen checken dat het niet
+        # stilzwijgend verdwijnt.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 22), "20:00", "emiel")],
+            [v("reed2", date(2026, 10, 22), "20:00", "emiel", soort=None)],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertTrue(any("niet in jullie reed 2-sheet" in x.tekst for x in m))
+
+    def test_verschil_buiten_het_overlap_van_beide_bronnen_wordt_niet_gemeld(self):
+        # De reed 2-sheet begint twee weken eerder dan de orkestlijst. Die
+        # twee weken zijn geen tegenspraak, alleen een voorsprong.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:00", "emiel")],
+            [v("reed2", date(2026, 9, 24), "20:00", "emiel"),
+             v("reed2", date(2026, 10, 6), "20:00", "emiel")],
+            leeg(), leeg(), INST, VANAF,
+        )
+        self.assertFalse(any("niet in de orkestlijst" in x.tekst for x in m))
+        self.assertFalse(any("niet in jullie reed 2-sheet" in x.tekst for x in m))
+
     def test_gelijke_bezetting_levert_niets_op(self):
         m = vergelijk(
             [v("orkest", date(2026, 10, 22), "20:00", "emiel")],

@@ -78,10 +78,31 @@ def _vergelijk_bronnen(orkest, reed2, inst, vanaf):
     meldingen = []
     per_dag_o = _per_dag(orkest, vanaf)
     per_dag_r = _per_dag(reed2, vanaf, alleen_met_publiek=True)
+    overlap = _overlap_bereik(orkest, reed2)
 
     for dag in sorted(set(per_dag_o) | set(per_dag_r)):
         o, r = per_dag_o.get(dag, []), per_dag_r.get(dag, [])
-        if o and r and len(o) != len(r):
+        if not o or not r:
+            # Een dag waarop maar een van de twee bronnen iets zegt, is
+            # alleen een echt verschil binnen de periode die beide bronnen
+            # bestrijken. Buiten dat overlap is de ene bron domweg nog niet zo
+            # ver — dat is geen tegenspraak, alleen een voorsprong.
+            if overlap is None or not (overlap[0] <= dag <= overlap[1]):
+                continue
+            if not o:
+                meldingen.append(Melding(
+                    Ernst.VERSCHIL, dag,
+                    f"staat in jullie reed 2-sheet ({len(r)}x), maar niet in de orkestlijst",
+                    tuple(_omschrijf(x) for x in r),
+                ))
+            else:
+                meldingen.append(Melding(
+                    Ernst.VERSCHIL, dag,
+                    f"staat in de orkestlijst ({len(o)}x), maar niet in jullie reed 2-sheet",
+                    tuple(_omschrijf(x) for x in o),
+                ))
+            continue
+        if len(o) != len(r):
             meldingen.append(Melding(
                 Ernst.VERSCHIL, dag,
                 f"aantal voorstellingen verschilt: orkestlijst {len(o)}, reed 2-sheet {len(r)}",
@@ -91,6 +112,24 @@ def _vergelijk_bronnen(orkest, reed2, inst, vanaf):
         for a, b in zip(o, r):
             meldingen += _vergelijk_paar(dag, a, b, inst)
     return meldingen
+
+
+def _overlap_bereik(orkest, reed2):
+    """Geef (eerste, laatste) datum die zowel de orkestlijst als de reed
+    2-sheet bestrijken, of None als een van beide leeg is.
+
+    De reed 2-sheet begint doorgaans eerder dan de orkestlijst (concept-
+    planning versus definitieve lijst). Buiten dit overlap zegt maar één bron
+    iets over een dag; dat is geen tegenspraak en hoort niet gemeld te
+    worden.
+    """
+    if not orkest or not reed2:
+        return None
+    start = max(min(v.datum for v in orkest), min(v.datum for v in reed2))
+    einde = min(max(v.datum for v in orkest), max(v.datum for v in reed2))
+    if start > einde:
+        return None
+    return start, einde
 
 
 def _vergelijk_paar(dag, o, r, inst):
