@@ -49,6 +49,47 @@ class TestAfsluitcodes(unittest.TestCase):
         self.assertIn("niet lezen", fout)
         self.assertNotIn("Traceback", fout)
 
+    def test_configuratie_die_geen_object_is_geeft_code_2_en_geen_traceback(self):
+        # Een lijst of losse tekst in plaats van een JSON-object gaf voorheen
+        # een Engelse AttributeError-traceback met afsluitcode 1 — dezelfde
+        # code als "er zijn meldingen gevonden".
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text(json.dumps(["cats"]), encoding="utf-8")
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
+    def test_trefwoorden_als_losse_tekst_geeft_code_2_in_plaats_van_stille_misparse(self):
+        # {"trefwoorden": "cats"} werd zonder foutmelding een tuple losse
+        # letters ('c', 'a', 't', 's'), waardoor bijna elke afspraak als
+        # Cats-gerelateerd telt — fout, en zonder enig signaal.
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text(json.dumps({"trefwoorden": "cats"}), encoding="utf-8")
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
+    def test_niet_numerieke_marge_geeft_code_2_en_geen_traceback(self):
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text(
+                json.dumps({"marge_voor_minuten": "vier uur"}), encoding="utf-8"
+            )
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
 
 if __name__ == "__main__":
     unittest.main()

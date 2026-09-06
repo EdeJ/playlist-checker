@@ -43,7 +43,7 @@ def main(argv=None):
 
     try:
         inst = _lees_instellingen(args.config)
-    except (json.JSONDecodeError, OSError) as fout:
+    except (json.JSONDecodeError, OSError, ParseFout) as fout:
         print(f"Kan {args.config} niet lezen: {fout}", file=sys.stderr)
         return 2
 
@@ -82,14 +82,38 @@ def _lees(pad):
 
 
 def _lees_instellingen(pad):
+    """Lees en valideer config/trefwoorden.json.
+
+    Zonder deze validatie geeft een lijst of losse tekenreeks in plaats van
+    een object een Engelse traceback met afsluitcode 1 — dezelfde code als
+    "er zijn meldingen"; een tekenreeks bij trefwoorden wordt zonder
+    foutmelding stilzwijgend een tuple losse letters, waardoor bijna elke
+    afspraak als Cats-gerelateerd telt. Beide zijn erger dan een duidelijke
+    Nederlandse foutmelding.
+    """
     if not Path(pad).exists():
         return Instellingen()
     rauw = json.loads(Path(pad).read_text(encoding="utf-8"))
+    if not isinstance(rauw, dict):
+        raise ParseFout(
+            f"{pad} moet een JSON-object zijn (met sleutels als 'trefwoorden'), "
+            f"geen {type(rauw).__name__}"
+        )
+    trefwoorden = rauw.get("trefwoorden", ["cats"])
+    if not isinstance(trefwoorden, list) or not all(isinstance(t, str) for t in trefwoorden):
+        raise ParseFout("'trefwoorden' in {} moet een lijst met tekst zijn".format(pad))
+    try:
+        marge_voor = int(rauw.get("marge_voor_minuten", 240))
+        marge_na = int(rauw.get("marge_na_minuten", 30))
+    except (TypeError, ValueError):
+        raise ParseFout(
+            f"'marge_voor_minuten' en 'marge_na_minuten' in {pad} moeten getallen zijn"
+        ) from None
     return Instellingen(
         mijn_naam=rauw.get("mijn_naam", "emiel"),
-        marge_voor_minuten=rauw.get("marge_voor_minuten", 240),
-        marge_na_minuten=rauw.get("marge_na_minuten", 30),
-        trefwoorden=tuple(t.lower() for t in rauw.get("trefwoorden", ["cats"])),
+        marge_voor_minuten=marge_voor,
+        marge_na_minuten=marge_na,
+        trefwoorden=tuple(t.lower() for t in trefwoorden),
     )
 
 
