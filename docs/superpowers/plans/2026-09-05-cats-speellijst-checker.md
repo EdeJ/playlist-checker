@@ -2552,24 +2552,43 @@ zijn. De twee Drive-bestanden haalt Claude op met alleen-lees-tools.
 ```bash
 #!/usr/bin/env bash
 # Haalt de website en de agenda op naar cache/. Alleen lezen.
+#
+# Elke download gaat eerst naar een tijdelijk bestand en wordt pas op zijn
+# plek gezet als hij compleet blijkt. `curl -o` kapt het doelbestand namelijk
+# af voordat er iets binnenkomt: valt de verbinding halverwege weg, dan blijft
+# er een halve agenda achter. Die parseert gewoon, zonder foutmelding, met
+# minder afspraken erin — en levert een rapport op vol meldingen dat er
+# voorstellingen in de agenda ontbreken die er wel degelijk in staan.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 mkdir -p cache
 
+# In cache/ zelf, zodat het verplaatsen een hernoeming op dezelfde schijf is
+# en dus in één ondeelbare stap gebeurt.
+werkmap="$(mktemp -d ./cache/.ophalen.XXXXXX)"
+trap 'rm -rf "$werkmap"' EXIT
+
 echo "musicalcats.nl ophalen..."
-curl -sSL --max-time 30 "https://musicalcats.nl/waar-wanneer/" -o cache/website.html
+if curl -sSL --max-time 30 "https://musicalcats.nl/waar-wanneer/" \
+        -o "$werkmap/website.html" \
+   && grep -q 'class="date"' "$werkmap/website.html"; then
+  mv "$werkmap/website.html" cache/website.html
+else
+  echo "website ophalen mislukt; cache/website.html blijft ongewijzigd" >&2
+fi
 
 if [[ -f config/ical_url.txt ]]; then
   echo "agenda ophalen..."
   # De URL zelf verschijnt nooit in de uitvoer; hij is een geheim.
   url="$(tr -d '[:space:]' < config/ical_url.txt)"
-  if ! curl -sSL --max-time 30 "$url" -o cache/agenda.ics; then
-    echo "agenda ophalen mislukt; controleer de URL in config/ical_url.txt" >&2
-    exit 1
-  fi
-  if ! head -1 cache/agenda.ics | grep -q "BEGIN:VCALENDAR"; then
-    echo "de agenda-URL gaf geen iCal-bestand terug; is hij nog geldig?" >&2
+  if curl -sSL --max-time 60 "$url" -o "$werkmap/agenda.ics" \
+     && head -1 "$werkmap/agenda.ics" | grep -q "BEGIN:VCALENDAR" \
+     && tail -5 "$werkmap/agenda.ics" | grep -q "END:VCALENDAR"; then
+    mv "$werkmap/agenda.ics" cache/agenda.ics
+  else
+    echo "agenda ophalen mislukt of onvolledig; cache/agenda.ics blijft" \
+         "ongewijzigd. Controleer de URL in config/ical_url.txt." >&2
     exit 1
   fi
 else
@@ -2587,8 +2606,27 @@ Maak hem uitvoerbaar: `chmod +x scripts/ophalen.sh`
 ./scripts/ophalen.sh && ls -la cache/
 ```
 
-Verwacht: `cache/website.html` van ruim 400 kB. Zonder `config/ical_url.txt`
-een waarschuwing op stderr en afsluitcode 0.
+Verwacht: `cache/website.html` van ruim 400 kB en een verse `cache/agenda.ics`.
+Zonder `config/ical_url.txt` een waarschuwing op stderr en afsluitcode 0.
+
+Toets ook dat een mislukte download niets kapotmaakt. Deze test raakt
+`config/ical_url.txt` niet aan — hij doet precies wat het script doet, maar dan
+met een adres dat niet bestaat:
+
+```bash
+md5sum cache/agenda.ics
+werkmap="$(mktemp -d ./cache/.test.XXXXXX)"
+curl -sSL --max-time 5 "https://example.invalid/geen-agenda" \
+     -o "$werkmap/agenda.ics" || echo "curl faalde, zoals bedoeld"
+head -1 "$werkmap/agenda.ics" 2>/dev/null | grep -q "BEGIN:VCALENDAR" \
+  || echo "validatie faalde, dus geen mv naar cache/ — zoals bedoeld"
+rm -rf "$werkmap"
+md5sum cache/agenda.ics
+```
+
+Verwacht: beide meldingen verschijnen en de md5 van `cache/agenda.ics` is vóór
+en na identiek. Dat is de hele winst van deze opzet: een kapotte download komt
+nooit verder dan de tijdelijke map.
 
 - [ ] **Stap 3: Schrijf de skill**
 
