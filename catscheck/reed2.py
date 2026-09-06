@@ -17,6 +17,12 @@ from catscheck.model import (
 # De kopregel staat niet altijd op regel 1: er kan een titelregel boven staan.
 _KOPWOORD = "Speeldatum"
 
+# De kolommen die iets over de planning zeggen. Drie collega's typen vrij in
+# de Opmerking-kolommen (een voetnoot als "laatste update 5-9" bijvoorbeeld);
+# inhoud dáár op een rij zonder datum is geen structurele verrassing. Inhoud
+# in een van deze kolommen zonder datum wel.
+_PLANNING_SLEUTELS = ("type", "aanvang", "theater", "plaats", "wie")
+
 
 def parse_reed2(csv_tekst):
     """Lees de reed 2-planning en geef alle dagen terug, ook VRIJ en BOUW."""
@@ -31,12 +37,16 @@ def parse_reed2(csv_tekst):
             continue
         ruwe_datum = _cel(rij, idx["datum"])
         if not ruwe_datum:
-            # De regel hierboven ving al de echt lege rijen af. Komen we hier
-            # toch, dan heeft de rij inhoud maar geen speeldatum — een
-            # structurele verrassing, geen lege dag. Elke andere misvorming
-            # in deze parser gooit een ParseFout; stil overslaan zou hier
-            # geen uitzondering moeten zijn.
-            raise ParseFout(f"regel {nummer} heeft inhoud maar geen speeldatum")
+            # De regel hierboven ving al de echt lege rijen af. Staat er op
+            # zo'n rij alleen iets in een Opmerking-kolom (een voetnoot,
+            # gedeeld door drie collega's), dan is dat geen structurele
+            # verrassing — gewoon overslaan. Staat er wel iets in een
+            # planningskolom zonder speeldatum, dan is dat dat wel: elke
+            # andere misvorming in deze parser gooit al een ParseFout, en
+            # stil overslaan hoort hier geen uitzondering te zijn.
+            if any(_cel(rij, idx[sleutel]) for sleutel in _PLANNING_SLEUTELS):
+                raise ParseFout(f"regel {nummer} heeft inhoud maar geen speeldatum")
+            continue
         dag = _maak_datum(ruwe_datum, nummer)
         voorstellingen.append(
             Voorstelling(

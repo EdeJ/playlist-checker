@@ -61,6 +61,24 @@ class TestValidatie(unittest.TestCase):
             parse_reed2(kapot)
         self.assertIn("datum", str(ctx.exception).lower())
 
+    def test_alleen_een_opmerking_zonder_datum_wordt_stil_overgeslagen(self):
+        # Drie collega's typen vrij in de Opmerking-kolommen; een voetnoot
+        # als "laatste update 5-9" op een rij zonder datum is geen
+        # structurele verrassing, gewoon geen speeldag. Dit mag de controle
+        # niet met exit 2 platleggen.
+        rij = FIXTURE + "\n,,,,,,laatste update 5-9,,\n"
+        vs = parse_reed2(rij)
+        self.assertEqual(len(vs), len(parse_reed2(FIXTURE)))
+
+    def test_wie_zonder_datum_geeft_nog_steeds_een_parsefout(self):
+        # Alleen de "Wie ?"-kolom is gevuld, verder niets, en geen datum. Dit
+        # hoort nog steeds te raisen — de narrowing mag alleen de drie
+        # Opmerking-kolommen negeren, niet de planningskolommen.
+        kapot = FIXTURE + "\n,,,,,Emiel,,,\n"
+        with self.assertRaises(ParseFout) as ctx:
+            parse_reed2(kapot)
+        self.assertIn("datum", str(ctx.exception).lower())
+
 
 if __name__ == "__main__":
     unittest.main()
