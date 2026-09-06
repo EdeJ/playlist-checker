@@ -18,7 +18,7 @@ werkmap="$(mktemp -d ./cache/.ophalen.XXXXXX)"
 trap 'rm -rf "$werkmap"' EXIT
 
 echo "musicalcats.nl ophalen..."
-if curl -sSL --max-time 30 "https://musicalcats.nl/waar-wanneer/" \
+if curl -sSL --fail --max-time 30 "https://musicalcats.nl/waar-wanneer/" \
         -o "$werkmap/website.html" \
    && grep -q 'class="date"' "$werkmap/website.html"; then
   mv "$werkmap/website.html" cache/website.html
@@ -30,7 +30,10 @@ if [[ -f config/ical_url.txt ]]; then
   echo "agenda ophalen..."
   # De URL zelf verschijnt nooit in de uitvoer; hij is een geheim.
   url="$(tr -d '[:space:]' < config/ical_url.txt)"
-  if curl -sSL --max-time 60 "$url" -o "$werkmap/agenda.ics" \
+  # De URL wordt via stdin aan curl gevoerd (-K -) in plaats van als
+  # argument: een argument staat in de procestabel (ps, /proc/*/cmdline) en
+  # is daarmee tijdens het ophalen voor iedereen op deze machine leesbaar.
+  if printf 'url = "%s"\n' "$url" | curl -sSL --max-time 60 -K - -o "$werkmap/agenda.ics" \
      && head -1 "$werkmap/agenda.ics" | grep -q "BEGIN:VCALENDAR" \
      && tail -5 "$werkmap/agenda.ics" | grep -q "END:VCALENDAR"; then
     mv "$werkmap/agenda.ics" cache/agenda.ics
