@@ -497,10 +497,16 @@ class TestParseOrkest(unittest.TestCase):
         # krijgt "0.84375" in het rapport te zien.
         self.assertEqual([v.tijd for v in self.vs][:2], ["20:15", "20:15"])
 
-    def test_een_rij_die_korter_is_dan_de_kop_geeft_geen_fout(self):
-        # Excel laat cellen achteraan gewoon weg; de rij van Ma 12 oktober
-        # heeft er maar twee.
-        self.assertEqual(len(self.vs), 7)
+    def test_een_rij_die_korter_is_dan_de_kop_levert_geen_indexerror(self):
+        # Excel laat cellen achteraan weg. Staat Reed 2 voorbij het einde van
+        # de rij, dan is die stoel leeg — en mag het geen IndexError geven.
+        def kort(t):
+            t["Oktober"][2] = t["Oktober"][2][:6]
+
+        vs = parse_orkest(aangepast(kort))
+        eerste = [v for v in vs if v.datum == date(2026, 10, 6)][0]
+        self.assertIsNone(eerste.reed2)
+        self.assertEqual(eerste.type, "TO")
 
     def test_twee_voorstellingen_op_een_dag_blijven_allebei_staan(self):
         op_23 = [v for v in self.vs if v.datum == date(2026, 10, 23)]
@@ -536,9 +542,13 @@ class TestParseOrkest(unittest.TestCase):
         self.assertTrue(all(v.datum.year in (2026, 2027) for v in self.vs))
         self.assertEqual(len(self.vs), 7)
 
-    def test_input_tabblad_levert_niets_op(self):
-        # INPUT draagt geen maandnaam en heeft geen datarijen.
-        self.assertTrue(all(v.plaats is not None for v in self.vs))
+    def test_tabblad_zonder_maandnaam_levert_niets_op(self):
+        # INPUT draagt geen maandnaam; wat daar staat is nooit een
+        # voorstelling, ook niet als het op een datarij lijkt.
+        def input_met_datarij(t):
+            t["INPUT"].append(["Di", "6.0", "0.84375", "TO", "Almere"])
+
+        self.assertEqual(len(parse_orkest(aangepast(input_met_datarij))), 7)
 
 
 class TestValidatie(unittest.TestCase):
@@ -1266,12 +1276,12 @@ Verwacht: PASS
 ```bash
 grep -rn "orkest.txt\|stempels.json\|read_file_content\|download_file_content" \
   --include=*.py --include=*.sh --include=*.md --include=*.json . \
-  | grep -v "docs/superpowers/plans/2026-09-05" \
-  | grep -v "docs/superpowers/specs/2026-09-0"
+  | grep -v "docs/superpowers/"
 ```
 
-Verwacht: geen enkele regel. De twee uitgesloten mappen zijn geschiedenis en
-horen te blijven staan zoals ze zijn.
+Verwacht: geen enkele regel. `docs/superpowers/` is uitgesloten omdat daar de
+ontwerpen en dit plan zelf staan: die citeren de oude namen met opzet, als
+beschrijving van de situatie die we juist aan het vervangen zijn.
 
 - [ ] **Stap 4: Meld de decembervondst aan Emiel**
 

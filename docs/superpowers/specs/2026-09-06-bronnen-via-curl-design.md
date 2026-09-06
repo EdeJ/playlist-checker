@@ -1,7 +1,7 @@
 # Alle bronnen via curl — ontwerp
 
 Datum: 2026-09-06
-Status: ontworpen
+Status: gebouwd (2026-09-06)
 Vervolg op: `2026-09-05-cats-speellijst-checker-design.md`
 
 ## Aanleiding

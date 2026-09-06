@@ -1,13 +1,36 @@
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from catscheck.__main__ import _lees_instellingen, main
+from tests.orkestblad import orkest_xlsx
 
-FIXTURES = str(Path(__file__).parent / "fixtures")
+_TIJDELIJK = None
+FIXTURES = None
+
+
+def setUpModule():
+    """Bouw een cachemap met alle vier de bronnen.
+
+    De drie tekstbronnen komen uit tests/fixtures; de orkestlijst wordt uit
+    tests/orkestblad.py opgebouwd, zodat de fixture leesbaar blijft en niet
+    als binair bestand in git belandt.
+    """
+    global _TIJDELIJK, FIXTURES
+    _TIJDELIJK = tempfile.TemporaryDirectory()
+    FIXTURES = _TIJDELIJK.name
+    bron = Path(__file__).parent / "fixtures"
+    for naam in ("reed2.csv", "website.html", "agenda.ics"):
+        shutil.copy(bron / naam, Path(FIXTURES) / naam)
+    (Path(FIXTURES) / "orkest.xlsx").write_bytes(orkest_xlsx())
+
+
+def tearDownModule():
+    _TIJDELIJK.cleanup()
 
 
 def draai(argv):

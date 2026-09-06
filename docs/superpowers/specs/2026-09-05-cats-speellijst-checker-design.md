@@ -3,6 +3,10 @@
 Datum: 2026-09-05
 Status: gebouwd (2026-09-06)
 
+Achterhaald op 2026-09-06 wat het ophalen betreft: alle vier de bronnen gaan
+nu met `curl` naar `cache/` en de orkestlijst wordt als xlsx gelezen. Zie
+`2026-09-06-bronnen-via-curl-design.md`.
+
 ## Doel
 
 Inconsistenties opsporen tussen vier bronnen die allemaal iets zeggen over de

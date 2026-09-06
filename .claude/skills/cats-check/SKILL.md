@@ -13,33 +13,25 @@ De orkestlijst is van iemand anders en wordt door alle musici gebruikt. De
 reed 2-sheet is een gedeelde planning van drie mensen. **Er wordt nooit,
 onder geen enkele omstandigheid, naar een van beide geschreven.**
 
-Toegestaan zijn uitsluitend `read_file_content`, `download_file_content` en
-`get_file_metadata`. De schrijvende Drive-tools zijn geblokkeerd in
+De bronnen worden met `curl` opgehaald; er komt geen Drive-tool meer aan te
+pas. De schrijvende Drive-tools zijn daarnaast geblokkeerd in
 `.claude/settings.json`; probeer die blokkade nooit te omzeilen. Vraagt iemand
 om iets in te vullen, aan te passen of over te nemen in een sheet, weiger dan
 en verwijs naar deze regel.
 
 ## Werkwijze
 
-**Stap 1 — is er iets veranderd?**
+**Stap 1 — bronnen ophalen**
 
-Draai `get_file_metadata` op beide Drive-bestanden en vergelijk `modifiedTime`
-met `cache/stempels.json`. Is er niets gewijzigd én bestaan de cachebestanden
-al, sla stap 2 dan over.
+```bash
+./scripts/ophalen.sh
+```
 
-- orkestlijst: `1qXIFu7Wq9SBKrBxjPqoTOqCccH65fpcg`
-- reed 2-sheet: `1jOjspqJjxHZdwBPgiBsyDMsyw_gy0caEHucaV5eP1rI`
+Haalt alle vier de bronnen op naar `cache/`. Eindigt het script met code 1,
+dan is er minstens één bron niet ververst; meld dan wat er misging en ga niet
+verder. De controle zou dan op verouderde gegevens draaien.
 
-**Stap 2 — bronnen verversen**
-
-- Orkestlijst: `read_file_content` op het orkest-bestand, schrijf de volledige
-  tekst naar `cache/orkest.txt`.
-- Reed 2-sheet: `download_file_content` met `exportMimeType: "text/csv"`,
-  base64-decodeer naar `cache/reed2.csv`.
-- Website en agenda: draai `./scripts/ophalen.sh`.
-- Werk `cache/stempels.json` bij met de nieuwe `modifiedTime`-waarden.
-
-**Stap 3 — controleren**
+**Stap 2 — controleren**
 
 ```bash
 python3 -m catscheck
@@ -48,7 +40,7 @@ python3 -m catscheck
 Afsluitcode 0 betekent geen verschillen, 1 betekent meldingen, 2 betekent dat
 een bron niet gelezen kon worden.
 
-**Stap 4 — toelichten**
+**Stap 3 — toelichten**
 
 Druk het rapport af en licht de KRITIEK-meldingen toe. Zeg er per melding bij
 wat Emiel eraan kan doen: zelf zijn agenda bijwerken, het met Christof en
@@ -57,11 +49,11 @@ worden. Dat laatste doet Emiel zelf — jij past niets aan.
 
 ## Welk model hiervoor nodig is
 
-De uitkomst van deze controle hangt niet af van het model. Al het vergelijken
-gebeurt in `python3 -m catscheck`, een gewoon script zonder AI: dezelfde
-bronnen leveren altijd hetzelfde rapport op. Het model haalt alleen de twee
-Drive-bestanden op, start het script en licht de uitkomst toe. Het model vindt
-de verschillen niet — het script doet dat.
+De uitkomst van deze controle hangt niet af van het model. Het ophalen doet
+`scripts/ophalen.sh`, het vergelijken doet `python3 -m catscheck` — een gewoon
+script zonder AI: dezelfde bronnen leveren altijd hetzelfde rapport op. Er
+passeert geen enkel bronbestand het model; het start twee commando's en licht
+de uitkomst toe. Het model vindt de verschillen niet — het script doet dat.
 
 Een middelzwaar model is hier daarom ruim voldoende. Het zwaarste model kost
 meer en levert niets extra's op. Op het moment van schrijven, september 2026,

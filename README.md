@@ -22,21 +22,20 @@ In Claude Code: `/cats-check`
 Handmatig, met een gevulde `cache/`:
 
 ```bash
-./scripts/ophalen.sh          # website en agenda
+./scripts/ophalen.sh          # alle vier de bronnen
 python3 -m catscheck          # controleren
 python3 -m catscheck --vanaf 2026-10-01 --alles
 ```
 
 ## Welk model
 
-De controle zelf is een gewoon Python-script zonder AI; het model haalt alleen
-de bronnen op en licht het rapport toe. Een middelzwaar model volstaat dus
+De controle zelf is een gewoon Python-script zonder AI; het model start het
+ophalen en licht het rapport toe. Een middelzwaar model volstaat dus
 ruimschoots — op dit moment Sonnet. Wisselen kan met `/model`.
 
-Van de vier bronnen passeren alleen de twee Drive-bestanden het model, samen
-zo'n 10.000 tokens, en alleen wanneer ze gewijzigd zijn. De agenda (3 MB) en de
-website (416 kB) gaan met `curl` rechtstreeks naar `cache/` en komen nooit in
-een gesprek terecht.
+Geen van de vier bronnen passeert het model. `scripts/ophalen.sh` zet ze
+allemaal met `curl` rechtstreeks in `cache/`; alleen het rapport komt in het
+gesprek terecht.
 
 ## Tests
 
