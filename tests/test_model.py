@@ -6,6 +6,7 @@ from catscheck.model import (
     normaliseer_naam,
     normaliseer_plaats,
     normaliseer_tijd,
+    normaliseer_type,
 )
 
 
@@ -21,6 +22,29 @@ class TestNormaliseerNaam(unittest.TestCase):
     def test_leeg_tussen_haakjes_telt_als_leeg(self):
         # De orkestlijst gebruikt "(leeg)" als expliciete markering.
         self.assertIsNone(normaliseer_naam("(leeg)"))
+
+
+class TestNormaliseerType(unittest.TestCase):
+    def test_hoofdletters_en_spaties(self):
+        self.assertEqual(normaliseer_type(" reg "), "REG")
+
+    def test_lege_waarden_worden_none(self):
+        self.assertIsNone(normaliseer_type(""))
+        self.assertIsNone(normaliseer_type(None))
+
+    def test_s_optie_voluit_telt_als_s_opt(self):
+        # De reed 2-sheet schrijft de superoptie eenmalig voluit; de
+        # orkestlijst gebruikt altijd de afkorting. Zonder deze alias viel
+        # die voorstelling als "onbekend type" buiten de controle.
+        self.assertEqual(normaliseer_type("S-OPTIE"), "S-OPT")
+
+    def test_s_optie_komt_overeen_met_de_afkorting_uit_de_orkestlijst(self):
+        self.assertEqual(normaliseer_type("S-OPTIE"), normaliseer_type("S-OPT"))
+
+    def test_een_onbekend_type_blijft_staan(self):
+        # Onbekende types moeten als melding doorstromen, niet stilletjes
+        # verdwijnen of op iets bekends worden geraden.
+        self.assertEqual(normaliseer_type("ONZIN"), "ONZIN")
 
 
 class TestNormaliseerPlaats(unittest.TestCase):

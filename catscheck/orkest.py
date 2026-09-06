@@ -16,6 +16,7 @@ from catscheck.model import (
     normaliseer_naam,
     normaliseer_plaats,
     normaliseer_tijd,
+    normaliseer_type,
 )
 from catscheck.xlsx import lees_tabbladen
 
@@ -81,7 +82,7 @@ def parse_orkest(data, startjaar=2026):
                 Voorstelling(
                     datum=dag,
                     tijd=_tijd_uit_cel(_cel(rij, 2)),
-                    type=soort.upper(),
+                    type=normaliseer_type(soort),
                     plaats=normaliseer_plaats(_cel(rij, 4)),
                     theater=None,
                     reed2=normaliseer_naam(_cel(rij, reed2_index)),

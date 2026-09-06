@@ -36,6 +36,15 @@ WERK_TYPES = frozenset({"MON", "BESL"})
 # waarop de productie naar een ander theater verhuist.
 NEGEER_TYPES = frozenset({"BOUW", "VRIJ", "OVERSTA DAG"})
 
+# Typecodes die per bron anders geschreven worden. Sleutel is de
+# genormaliseerde (hoofdletters, getrimde) vorm. De reed 2-sheet schrijft de
+# superoptie eenmalig voluit; de orkestlijst gebruikt altijd de afkorting.
+# Zonder deze alias viel die voorstelling als "onbekend type" buiten de
+# controle in plaats van vergeleken te worden.
+TYPE_ALIAS = {
+    "S-OPTIE": "S-OPT",
+}
+
 # Plaatsnamen die per bron anders geschreven worden. Sleutel is de
 # genormaliseerde (lowercase, getrimde) vorm.
 PLAATS_ALIAS = {
@@ -71,6 +80,20 @@ def normaliseer_plaats(ruw):
     if schoon in _LEEG:
         return None
     return PLAATS_ALIAS.get(schoon, schoon.upper())
+
+
+def normaliseer_type(ruw):
+    """Maak een typecode vergelijkbaar: hoofdletters, aliassen opgelost.
+
+    Een onbekende code blijft staan; vergelijk.py meldt hem dan als
+    onbekend type. Raden zou een voorstelling stil verkeerd indelen.
+    """
+    if ruw is None:
+        return None
+    schoon = " ".join(str(ruw).split()).upper()
+    if schoon.lower() in _LEEG:
+        return None
+    return TYPE_ALIAS.get(schoon, schoon)
 
 
 def normaliseer_tijd(ruw):

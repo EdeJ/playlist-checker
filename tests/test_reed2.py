@@ -40,6 +40,15 @@ class TestParseReed2(unittest.TestCase):
         self.assertEqual([x.tijd for x in op23], ["15:00", "20:00"])
         self.assertEqual([x.type for x in op23], ["S-OPT", "REG"])
 
+    def test_s_optie_voluit_wordt_gelezen_als_s_opt(self):
+        # In de echte sheet staat de superoptie eenmalig voluit als
+        # "S-OPTIE"; de orkestlijst schrijft altijd "S-OPT". Zonder alias
+        # viel die voorstelling als onbekend type buiten de controle.
+        rij = FIXTURE + "\nma 28-12-2026,S-OPTIE,20:00,Chasse,BREDA,Emiel,,,\n"
+        vs = parse_reed2(rij)
+        v = [x for x in vs if x.datum == date(2026, 12, 28)][0]
+        self.assertEqual(v.type, "S-OPT")
+
 
 class TestValidatie(unittest.TestCase):
     def test_verkeerde_weekdag_geeft_een_parsefout(self):

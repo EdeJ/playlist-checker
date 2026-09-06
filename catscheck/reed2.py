@@ -12,6 +12,7 @@ from catscheck.model import (
     normaliseer_naam,
     normaliseer_plaats,
     normaliseer_tijd,
+    normaliseer_type,
 )
 
 # De kopregel staat niet altijd op regel 1: er kan een titelregel boven staan.
@@ -52,7 +53,7 @@ def parse_reed2(csv_tekst):
             Voorstelling(
                 datum=dag,
                 tijd=normaliseer_tijd(_cel(rij, idx["aanvang"])),
-                type=(_cel(rij, idx["type"]) or "").upper() or None,
+                type=normaliseer_type(_cel(rij, idx["type"])),
                 plaats=normaliseer_plaats(_cel(rij, idx["plaats"])),
                 theater=_cel(rij, idx["theater"]) or None,
                 reed2=normaliseer_naam(_cel(rij, idx["wie"])),
