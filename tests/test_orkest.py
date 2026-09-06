@@ -4,7 +4,7 @@ from datetime import date
 
 from catscheck.model import ParseFout
 from catscheck.orkest import parse_orkest
-from tests.orkestblad import ORKEST_TABBLADEN, VERBORGEN, orkest_xlsx
+from tests.orkestblad import ORKEST_TABBLADEN, VERBORGEN, kop, orkest_xlsx, rij
 from tests.xlsxhulp import maak_xlsx
 
 
@@ -83,12 +83,10 @@ class TestParseOrkest(unittest.TestCase):
         self.assertEqual(len(self.vs), 7)
 
     def test_tabblad_zonder_maandnaam_levert_niets_op(self):
-        # INPUT draagt geen maandnaam; wat daar staat is nooit een
-        # voorstelling, ook niet als het op een datarij lijkt.
-        def input_met_datarij(t):
-            t["INPUT"].append(["Di", "6.0", "0.84375", "TO", "Almere"])
-
-        self.assertEqual(len(parse_orkest(aangepast(input_met_datarij))), 7)
+        # INPUT draagt geen maandnaam en heeft nul datarijen; dat mag geen
+        # vals alarm geven. (Bevat zo'n tabblad wél datarijen, dan hoort dat
+        # juist een ParseFout te geven — zie TestValidatie hieronder.)
+        self.assertEqual(len(self.vs), 7)
 
 
 class TestValidatie(unittest.TestCase):
@@ -132,6 +130,33 @@ class TestValidatie(unittest.TestCase):
         vs = parse_orkest(aangepast(leeg_tabblad))
         self.assertEqual(len(vs), 7)
 
+    def test_tabblad_zonder_herkenbare_maandnaam_met_datarijen_geeft_een_parsefout(self):
+        # "Dec" is geen erkende maandnaam (die heet "December"). Staan er
+        # datarijen in, dan verdwijnt die maand geluidloos zonder deze
+        # bewaking — hetzelfde risico als het spiegelbeeld (wel maandnaam,
+        # geen Reed 2-kop), dat al een ParseFout geeft.
+        def hernoemd_tabblad(t):
+            t["Dec"] = [
+                kop("DECEMBER"),
+                rij("Ma", "1.0", "0.833333333333333", "REG", "Almere", "Marielle", "Emiel"),
+            ]
+
+        with self.assertRaises(ParseFout) as ctx:
+            parse_orkest(aangepast(hernoemd_tabblad))
+        self.assertIn("Dec", str(ctx.exception))
+
+    def test_input_met_een_datarij_geeft_ook_een_parsefout(self):
+        # Hetzelfde geldt voor INPUT zelf: in de praktijk heeft dat tabblad
+        # nul datarijen (zie TestParseOrkest hierboven), maar staat er onverwacht
+        # toch iets datarij-achtigs in, dan is dat geen reden om het stil te
+        # negeren.
+        def input_met_datarij(t):
+            t["INPUT"].append(["Di", "6.0", "0.84375", "TO", "Almere"])
+
+        with self.assertRaises(ParseFout) as ctx:
+            parse_orkest(aangepast(input_met_datarij))
+        self.assertIn("INPUT", str(ctx.exception))
+
     def test_tijd_buiten_bereik_geeft_een_parsefout(self):
         def kapot(t):
             t["Oktober"][2][2] = "1.5"
@@ -152,6 +177,39 @@ class TestValidatie(unittest.TestCase):
     def test_een_bestand_dat_geen_xlsx_is_geeft_een_parsefout(self):
         with self.assertRaises(ParseFout):
             parse_orkest(b"<html>Sign in to continue</html>")
+
+    def test_dagnummer_nan_geeft_een_parsefout(self):
+        # "nan" passeert _is_datarij, want float("nan") slaagt. Pas
+        # int(float("nan")) gooit een ValueError, die in de ParseFout moet
+        # landen in plaats van als traceback naar buiten te komen.
+        def kapot(t):
+            t["Oktober"][2][1] = "nan"
+
+        with self.assertRaises(ParseFout) as ctx:
+            parse_orkest(aangepast(kapot))
+        self.assertIn("dagnummer", str(ctx.exception).lower())
+
+    def test_dagnummer_inf_geeft_een_parsefout(self):
+        # "inf" passeert _is_datarij net als "nan", maar
+        # int(float("inf")) gooit een OverflowError, niet een ValueError.
+        # Die tak was nergens gevangen: een Engelse traceback met de
+        # verkeerde afsluitcode in plaats van een ParseFout.
+        def kapot(t):
+            t["Oktober"][2][1] = "inf"
+
+        with self.assertRaises(ParseFout) as ctx:
+            parse_orkest(aangepast(kapot))
+        self.assertIn("dagnummer", str(ctx.exception).lower())
+
+    def test_dagnummer_wetenschappelijke_overflow_geeft_een_parsefout(self):
+        # "1e400" is met float() prima leesbaar (het wordt inf), maar
+        # int(float("1e400")) gooit dezelfde OverflowError als "inf".
+        def kapot(t):
+            t["Oktober"][2][1] = "1e400"
+
+        with self.assertRaises(ParseFout) as ctx:
+            parse_orkest(aangepast(kapot))
+        self.assertIn("dagnummer", str(ctx.exception).lower())
 
 
 if __name__ == "__main__":

@@ -40,7 +40,17 @@ def parse_orkest(data, startjaar=2026):
     for naam, rijen in lees_tabbladen(data):
         maand = MAANDEN.get(naam.strip().lower())
         if maand is None:
-            # INPUT en al wat verder geen maandnaam draagt.
+            # INPUT en al wat verder geen maandnaam draagt: geen probleem
+            # zolang er geen datarijen in staan. Staan die er wel, dan is dit
+            # vermoedelijk een verkeerd hernoemd maandtabblad ("Dec" in
+            # plaats van "December"), en stil overslaan zou die hele maand
+            # laten verdwijnen — hetzelfde risico als het spiegelbeeld
+            # hieronder (wel maandnaam, geen Reed 2-kop).
+            if any(_is_datarij(r) for r in rijen):
+                raise ParseFout(
+                    f"tabblad {naam.strip()} heeft datarijen maar geen "
+                    "herkenbare maandnaam; is het tabblad hernoemd?"
+                )
             continue
         if vorige_maand is not None and maand < vorige_maand:
             jaar += 1
@@ -115,9 +125,13 @@ def _cel(rij, index):
 
 
 def _dagnummer(ruw, rij):
+    # _is_datarij accepteert ook "nan", "inf" en "1e400": float() leest die
+    # allemaal. int(float(...)) gooit dan een ValueError (nan) of een
+    # OverflowError (inf, en alles wat naar inf overloopt) — allebei horen
+    # ze hier te stoppen, niet als traceback naar buiten te komen.
     try:
         return int(float(ruw.strip()))
-    except ValueError:
+    except (ValueError, OverflowError):
         raise ParseFout(f"onbegrijpelijk dagnummer {ruw!r} in rij: {rij[:6]!r}") from None
 
 
