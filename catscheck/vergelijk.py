@@ -31,12 +31,20 @@ class Instellingen:
 
 
 def vergelijk(orkest, reed2, website, agenda, instellingen, vanaf):
-    """Geef alle bevindingen terug, ongesorteerd."""
+    """Geef alle bevindingen terug, ongesorteerd.
+
+    `agenda=None` betekent dat er geen agenda is opgehaald (bijvoorbeeld een
+    omgeving zonder het geheime iCal-adres) en slaat de agendavergelijking
+    over. Dat is iets anders dan een lege lijst: een lege agenda betekent
+    juist "wel opgehaald, maar niets erin", en zou voor elke speelbeurt een
+    valse KRITIEK-melding opleveren dat er niets in de agenda staat.
+    """
     meldingen = []
     meldingen += _onbekende_types(orkest, reed2, instellingen, vanaf)
     meldingen += _vergelijk_bronnen(orkest, reed2, instellingen, vanaf)
     meldingen += _vergelijk_website(orkest, website, vanaf)
-    meldingen += _vergelijk_agenda(orkest, reed2, agenda, instellingen, vanaf)
+    if agenda is not None:
+        meldingen += _vergelijk_agenda(orkest, reed2, agenda, instellingen, vanaf)
     return meldingen
 
 

@@ -226,6 +226,21 @@ class TestOnbekendType(unittest.TestCase):
         self.assertIn("REGG", m[0].tekst)
 
 
+class TestZonderAgenda(unittest.TestCase):
+    def test_agenda_is_none_slaat_agendavergelijking_over(self):
+        # Anders dan een lege lijst (die betekent: wel opgehaald, niets
+        # erin) betekent None: niet opgehaald. Zonder deze afslag zou elke
+        # speelbeurt hier een valse KRITIEK-melding krijgen, zoals
+        # test_speelbeurt_zonder_agenda_item_is_kritiek hieronder laat zien
+        # voor een lege lijst.
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 6), "20:15", "emiel")],
+            [v("reed2", date(2026, 10, 6), "20:15", "emiel")],
+            leeg(), None, INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+
 class TestAgenda(unittest.TestCase):
     def test_speelbeurt_zonder_agenda_item_is_kritiek(self):
         m = vergelijk(

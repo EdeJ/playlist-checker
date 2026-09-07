@@ -47,6 +47,24 @@ class TestAfsluitcodes(unittest.TestCase):
         self.assertIn("Cats speellijst-checker", uit)
         self.assertIn(code, (0, 1))
 
+    def test_zonder_agenda_werkt_ook_zonder_agenda_ics(self):
+        # De cloud-routine heeft het geheime iCal-adres niet, en dus ook
+        # geen cache/agenda.ics. --zonder-agenda mag dan niet als
+        # ontbrekend bronbestand (code 2) worden gemeld, en de agenda mag
+        # geen valse KRITIEK-meldingen opleveren.
+        with tempfile.TemporaryDirectory() as zonder_agenda:
+            for naam in ("reed2.csv", "website.html"):
+                shutil.copy(Path(FIXTURES) / naam, Path(zonder_agenda) / naam)
+            shutil.copy(
+                Path(FIXTURES) / "orkest.xlsx", Path(zonder_agenda) / "orkest.xlsx"
+            )
+            code, uit, fout = draai([
+                "--cache", zonder_agenda, "--vanaf", "2026-09-01", "--zonder-agenda",
+            ])
+        self.assertIn(code, (0, 1))
+        self.assertNotIn("agenda", uit.lower())
+        self.assertEqual(fout, "")
+
     def test_ontbrekende_cachemap_geeft_code_2(self):
         with tempfile.TemporaryDirectory() as leeg:
             code, _, fout = draai(["--cache", leeg])

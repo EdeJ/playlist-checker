@@ -25,6 +25,10 @@ def main(argv=None):
     p.add_argument("--config", default="config/trefwoorden.json", type=Path)
     p.add_argument("--vanaf", default=None, help="peildatum JJJJ-MM-DD, standaard vandaag")
     p.add_argument("--alles", action="store_true", help="vat lange groepen niet samen")
+    p.add_argument(
+        "--zonder-agenda", action="store_true",
+        help="sla de agendavergelijking over (voor omgevingen zonder het geheime iCal-adres)",
+    )
     args = p.parse_args(argv)
 
     # Ook deze twee lezen invoer van de gebruiker. Zonder vangnet leveren ze
@@ -46,11 +50,13 @@ def main(argv=None):
         print(f"Kan {args.config} niet lezen: {fout}", file=sys.stderr)
         return 2
 
+    agenda, overgeslagen, onleesbaar = None, 0, 0
     try:
         orkest = parse_orkest(_lees_bytes(args.cache / "orkest.xlsx"))
         reed2 = parse_reed2(_lees(args.cache / "reed2.csv"))
         website, website_volledig = parse_website(_lees(args.cache / "website.html"))
-        agenda, overgeslagen, onleesbaar = parse_agenda(_lees(args.cache / "agenda.ics"))
+        if not args.zonder_agenda:
+            agenda, overgeslagen, onleesbaar = parse_agenda(_lees(args.cache / "agenda.ics"))
     except ParseFout as fout:
         print(f"De controle kon niet worden uitgevoerd: {fout}", file=sys.stderr)
         return 2
