@@ -1,5 +1,6 @@
 """Maak Nederlandse terminaltekst van de bevindingen."""
 
+import json
 from collections import Counter
 
 from catscheck.model import Ernst
@@ -61,6 +62,32 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
             f"begintijd en konden niet gecontroleerd worden."
         )
     return "\n".join(regels).rstrip() + "\n"
+
+
+def maak_json(meldingen, vanaf, overgeslagen_herhalend=0,
+              website_onbetrouwbaar=False, onleesbare_afspraken=0):
+    """Geef de bevindingen als JSON-tekst, ongesamenvat.
+
+    Bedoeld voor afnemers die zelf iets met de structuur doen (zoals een
+    rapportpagina) in plaats van de Nederlandse terminaltekst te moeten
+    terugparsen. Vat daarom, anders dan maak_rapport, nooit samen: de
+    afnemer beslist zelf hoe een lange groep getoond wordt.
+    """
+    return json.dumps({
+        "peildatum": vanaf.isoformat(),
+        "website_onbetrouwbaar": website_onbetrouwbaar,
+        "overgeslagen_herhalende_agenda_afspraken": overgeslagen_herhalend,
+        "onleesbare_agenda_afspraken": onleesbare_afspraken,
+        "meldingen": [
+            {
+                "ernst": m.ernst.name,
+                "datum": m.datum.isoformat(),
+                "tekst": m.tekst,
+                "details": list(m.details),
+            }
+            for m in sorted(meldingen, key=lambda m: (m.ernst, m.datum, m.tekst))
+        ],
+    }, ensure_ascii=False, indent=2)
 
 
 def _toon_groep(groep, samenvatten_vanaf, mag_samenvatten=True):

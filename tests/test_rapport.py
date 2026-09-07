@@ -1,8 +1,9 @@
+import json
 import unittest
 from datetime import date, timedelta
 
 from catscheck.model import Ernst, Melding
-from catscheck.rapport import maak_rapport
+from catscheck.rapport import maak_json, maak_rapport
 
 VANAF = date(2026, 9, 5)
 
@@ -90,6 +91,38 @@ class TestRapport(unittest.TestCase):
         self.assertIn("gedeeltelijk", tekst.lower())
         # De waarschuwing moet boven de bevindingen staan, niet eronder.
         self.assertLess(tekst.index("LET OP"), tekst.index("Geen verschillen"))
+
+
+class TestJson(unittest.TestCase):
+    def test_geeft_geldige_json_met_de_bevindingen(self):
+        uit = maak_json([
+            Melding(Ernst.KRITIEK, date(2026, 12, 1), "niet in je agenda", ("detail",)),
+        ], VANAF)
+        data = json.loads(uit)
+        self.assertEqual(data["peildatum"], "2026-09-05")
+        self.assertEqual(len(data["meldingen"]), 1)
+        m = data["meldingen"][0]
+        self.assertEqual(m["ernst"], "KRITIEK")
+        self.assertEqual(m["datum"], "2026-12-01")
+        self.assertEqual(m["tekst"], "niet in je agenda")
+        self.assertEqual(m["details"], ["detail"])
+
+    def test_vat_nooit_samen_ook_niet_bij_veel_meldingen(self):
+        # maak_rapport vat lange, herhalende groepen samen; maak_json is voor
+        # een afnemer die zelf beslist hoe te tonen en moet dus alles geven.
+        meldingen = [
+            Melding(Ernst.OPEN, date(2026, 9, 5) + timedelta(days=i), "dezelfde tekst")
+            for i in range(20)
+        ]
+        data = json.loads(maak_json(meldingen, VANAF))
+        self.assertEqual(len(data["meldingen"]), 20)
+
+    def test_ernst_staat_boven_datum_in_de_sortering(self):
+        data = json.loads(maak_json([
+            Melding(Ernst.WEBSITE, date(2026, 9, 6), "site"),
+            Melding(Ernst.KRITIEK, date(2026, 12, 1), "kritiek"),
+        ], VANAF))
+        self.assertEqual([m["ernst"] for m in data["meldingen"]], ["KRITIEK", "WEBSITE"])
 
 
 if __name__ == "__main__":

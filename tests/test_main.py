@@ -65,6 +65,13 @@ class TestAfsluitcodes(unittest.TestCase):
         self.assertNotIn("agenda", uit.lower())
         self.assertEqual(fout, "")
 
+    def test_json_geeft_geldige_json_op_stdout(self):
+        code, uit, _ = draai(["--cache", FIXTURES, "--vanaf", "2026-09-01", "--json"])
+        self.assertIn(code, (0, 1))
+        data = json.loads(uit)
+        self.assertIn("meldingen", data)
+        self.assertIn("peildatum", data)
+
     def test_ontbrekende_cachemap_geeft_code_2(self):
         with tempfile.TemporaryDirectory() as leeg:
             code, _, fout = draai(["--cache", leeg])

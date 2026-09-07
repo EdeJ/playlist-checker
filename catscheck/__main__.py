@@ -13,7 +13,7 @@ from pathlib import Path
 from catscheck.agenda import parse_agenda
 from catscheck.model import ParseFout
 from catscheck.orkest import parse_orkest
-from catscheck.rapport import SAMENVATTEN_VANAF, maak_rapport
+from catscheck.rapport import SAMENVATTEN_VANAF, maak_json, maak_rapport
 from catscheck.reed2 import parse_reed2
 from catscheck.vergelijk import Instellingen, vergelijk
 from catscheck.website import parse_website
@@ -28,6 +28,10 @@ def main(argv=None):
     p.add_argument(
         "--zonder-agenda", action="store_true",
         help="sla de agendavergelijking over (voor omgevingen zonder het geheime iCal-adres)",
+    )
+    p.add_argument(
+        "--json", action="store_true",
+        help="schrijf de bevindingen als JSON in plaats van Nederlandse terminaltekst",
     )
     args = p.parse_args(argv)
 
@@ -73,12 +77,19 @@ def main(argv=None):
     meldingen = vergelijk(
         orkest, reed2, website if website_volledig else [], agenda, inst, vanaf
     )
-    print(maak_rapport(
-        meldingen, vanaf, overgeslagen,
-        samenvatten_vanaf=10 ** 9 if args.alles else SAMENVATTEN_VANAF,
-        website_onbetrouwbaar=not website_volledig,
-        onleesbare_afspraken=onleesbaar,
-    ))
+    if args.json:
+        print(maak_json(
+            meldingen, vanaf, overgeslagen,
+            website_onbetrouwbaar=not website_volledig,
+            onleesbare_afspraken=onleesbaar,
+        ))
+    else:
+        print(maak_rapport(
+            meldingen, vanaf, overgeslagen,
+            samenvatten_vanaf=10 ** 9 if args.alles else SAMENVATTEN_VANAF,
+            website_onbetrouwbaar=not website_volledig,
+            onleesbare_afspraken=onleesbaar,
+        ))
     return 1 if meldingen else 0
 
 
