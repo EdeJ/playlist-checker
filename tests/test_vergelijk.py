@@ -155,6 +155,17 @@ class TestVoorstellingen(unittest.TestCase):
         )
         self.assertTrue(any("aantal voorstellingen" in x.tekst.lower() for x in m))
 
+    def test_tijdsverschil_met_de_website_wordt_gemeld(self):
+        m = vergelijk(
+            [v("orkest", date(2027, 5, 20), "19:45", "michiel", plaats="DEN BOSCH")],
+            [v("reed2", date(2027, 5, 20), "19:45", "michiel", plaats="DEN BOSCH")],
+            [v("website", date(2027, 5, 20), "20:00", plaats="DEN BOSCH")],
+            leeg(), INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.WEBSITE])
+        self.assertIn("19:45", m[0].tekst)
+        self.assertIn("20:00", m[0].tekst)
+
     def test_website_verschil_is_alleen_informatief(self):
         m = vergelijk(
             [v("orkest", date(2027, 5, 20), "19:45", "michiel", plaats="DEN BOSCH")],
