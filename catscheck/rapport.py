@@ -65,17 +65,23 @@ def maak_rapport(meldingen, vanaf, overgeslagen_herhalend=0,
 
 
 def maak_json(meldingen, vanaf, overgeslagen_herhalend=0,
-              website_onbetrouwbaar=False, onleesbare_afspraken=0):
+              website_onbetrouwbaar=False, onleesbare_afspraken=0,
+              agenda_gecontroleerd=True):
     """Geef de bevindingen als JSON-tekst, ongesamenvat.
 
     Bedoeld voor afnemers die zelf iets met de structuur doen (zoals een
     rapportpagina) in plaats van de Nederlandse terminaltekst te moeten
     terugparsen. Vat daarom, anders dan maak_rapport, nooit samen: de
     afnemer beslist zelf hoe een lange groep getoond wordt.
+
+    agenda_gecontroleerd staat op False bij --zonder-agenda, zodat een
+    afnemer kan tonen dat de agenda deze keer niet is meegenomen in plaats
+    van dat stilzwijgend te laten lijken op "agenda klopt".
     """
     return json.dumps({
         "peildatum": vanaf.isoformat(),
         "website_onbetrouwbaar": website_onbetrouwbaar,
+        "agenda_gecontroleerd": agenda_gecontroleerd,
         "overgeslagen_herhalende_agenda_afspraken": overgeslagen_herhalend,
         "onleesbare_agenda_afspraken": onleesbare_afspraken,
         "meldingen": [

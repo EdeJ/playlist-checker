@@ -117,6 +117,14 @@ class TestJson(unittest.TestCase):
         data = json.loads(maak_json(meldingen, VANAF))
         self.assertEqual(len(data["meldingen"]), 20)
 
+    def test_agenda_gecontroleerd_staat_standaard_op_waar(self):
+        data = json.loads(maak_json([], VANAF))
+        self.assertIs(data["agenda_gecontroleerd"], True)
+
+    def test_agenda_gecontroleerd_kan_op_onwaar_gezet_worden(self):
+        data = json.loads(maak_json([], VANAF, agenda_gecontroleerd=False))
+        self.assertIs(data["agenda_gecontroleerd"], False)
+
     def test_ernst_staat_boven_datum_in_de_sortering(self):
         data = json.loads(maak_json([
             Melding(Ernst.WEBSITE, date(2026, 9, 6), "site"),

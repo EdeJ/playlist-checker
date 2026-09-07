@@ -71,6 +71,22 @@ class TestAfsluitcodes(unittest.TestCase):
         data = json.loads(uit)
         self.assertIn("meldingen", data)
         self.assertIn("peildatum", data)
+        self.assertIs(data["agenda_gecontroleerd"], True)
+
+    def test_json_zonder_agenda_meldt_dat_in_de_json(self):
+        with tempfile.TemporaryDirectory() as zonder_agenda:
+            for naam in ("reed2.csv", "website.html"):
+                shutil.copy(Path(FIXTURES) / naam, Path(zonder_agenda) / naam)
+            shutil.copy(
+                Path(FIXTURES) / "orkest.xlsx", Path(zonder_agenda) / "orkest.xlsx"
+            )
+            code, uit, _ = draai([
+                "--cache", zonder_agenda, "--vanaf", "2026-09-01",
+                "--zonder-agenda", "--json",
+            ])
+        self.assertIn(code, (0, 1))
+        data = json.loads(uit)
+        self.assertIs(data["agenda_gecontroleerd"], False)
 
     def test_ontbrekende_cachemap_geeft_code_2(self):
         with tempfile.TemporaryDirectory() as leeg:

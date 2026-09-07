@@ -82,6 +82,7 @@ def main(argv=None):
             meldingen, vanaf, overgeslagen,
             website_onbetrouwbaar=not website_volledig,
             onleesbare_afspraken=onleesbaar,
+            agenda_gecontroleerd=not args.zonder_agenda,
         ))
     else:
         print(maak_rapport(

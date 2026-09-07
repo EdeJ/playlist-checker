@@ -1,0 +1,300 @@
+<title>Cats Speellijst-Check</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f7f4ec;
+    --bg-raised: #fffdf7;
+    --ink: #262019;
+    --ink-soft: #5b5346;
+    --line: #ddd4c0;
+    --accent: #9c6b1f;
+    --accent-ink: #6f4c14;
+    --kritiek: #b23a2e;
+    --kritiek-bg: #fbe8e4;
+    --verschil: #a3671a;
+    --verschil-bg: #f7ecd8;
+    --website: #2f7268;
+    --website-bg: #e3f0ec;
+    --open: #5b4d94;
+    --open-bg: #ece8f7;
+    --shadow: 0 1px 0 rgba(38, 32, 25, 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15130f;
+      --bg-raised: #1d1a14;
+      --ink: #ece5d6;
+      --ink-soft: #a99d87;
+      --line: #38321f;
+      --accent: #d1a13f;
+      --accent-ink: #e8c47a;
+      --kritiek: #e07468;
+      --kritiek-bg: #2e1a17;
+      --verschil: #e0a94e;
+      --verschil-bg: #2c2415;
+      --website: #6cbcae;
+      --website-bg: #142522;
+      --open: #a99ce0;
+      --open-bg: #201c33;
+      --shadow: none;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #15130f;
+    --bg-raised: #1d1a14;
+    --ink: #ece5d6;
+    --ink-soft: #a99d87;
+    --line: #38321f;
+    --accent: #d1a13f;
+    --accent-ink: #e8c47a;
+    --kritiek: #e07468;
+    --kritiek-bg: #2e1a17;
+    --verschil: #e0a94e;
+    --verschil-bg: #2c2415;
+    --website: #6cbcae;
+    --website-bg: #142522;
+    --open: #a99ce0;
+    --open-bg: #201c33;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Public Sans", -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .pagina {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+
+  /* -- masthead ------------------------------------------------------- */
+  .masthead {
+    border-bottom: 3px double var(--line);
+    padding-bottom: 1.75rem;
+    margin-bottom: 2.25rem;
+  }
+  .eyebrow {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin-bottom: 0.6rem;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-optical-sizing: auto;
+    font-weight: 900;
+    font-size: clamp(2.1rem, 6vw, 3rem);
+    line-height: 1.02;
+    margin: 0 0 0.65rem;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .steekwoorden {
+    font-size: 0.98rem;
+    color: var(--ink-soft);
+    max-width: 46ch;
+  }
+  .meta {
+    margin-top: 1.1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.4rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+  .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* -- samenvattingsstrip ---------------------------------------------- */
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 2.5rem;
+    background: var(--bg-raised);
+    box-shadow: var(--shadow);
+  }
+  .strip a {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    padding: 0.9rem 0.75rem;
+    text-align: center;
+    border-left: 1px solid var(--line);
+  }
+  .strip a:first-child { border-left: none; }
+  .strip .n {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: 1.7rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .strip .l {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .strip .n.kritiek { color: var(--kritiek); }
+  .strip .n.verschil { color: var(--verschil); }
+  .strip .n.website { color: var(--website); }
+  .strip .n.open { color: var(--open); }
+
+  /* -- secties ----------------------------------------------------------- */
+  .sectie { margin-bottom: 2.75rem; scroll-margin-top: 1rem; }
+  .sectie-kop {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.9rem;
+  }
+  .sectie-kop h2 {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    margin: 0;
+    padding: 0.1rem 0.5rem;
+    border-radius: 2px;
+  }
+  .sectie-sub { color: var(--ink-soft); font-size: 0.88rem; flex: 1; }
+  .sectie-aantal {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+  .sectie-kritiek .sectie-kop h2 { background: var(--kritiek-bg); color: var(--kritiek); }
+  .sectie-verschil .sectie-kop h2 { background: var(--verschil-bg); color: var(--verschil); }
+  .sectie-website .sectie-kop h2 { background: var(--website-bg); color: var(--website); }
+  .sectie-open .sectie-kop h2 { background: var(--open-bg); color: var(--open); }
+
+  .melding-list { list-style: none; margin: 0; padding: 0; }
+  .melding {
+    display: grid;
+    grid-template-columns: 6.6rem 1fr;
+    gap: 0.1rem 0.9rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .melding:last-child { border-bottom: none; }
+  .datum {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+    padding-top: 0.1rem;
+  }
+  .tekst { font-size: 0.95rem; }
+  .detail {
+    grid-column: 2;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin-top: 0.15rem;
+  }
+
+  .groep-samengevat {
+    font-size: 0.86rem;
+    color: var(--ink-soft);
+    margin: 0 0 0.6rem;
+  }
+  .sum-list { list-style: none; margin: 0; padding: 0; }
+  .sum-row {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.9rem;
+  }
+  .sum-row:last-child { border-bottom: none; }
+  .sum-n {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  .alles-goed {
+    padding: 2.5rem 0;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 1.05rem;
+  }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+  footer p { max-width: 58ch; margin: 0 0 0.5rem; }
+  footer code {
+    font-family: "IBM Plex Mono", monospace;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+
+<div class="pagina">
+  <header class="masthead">
+    <span class="eyebrow">Reed 2 &middot; orkestlijst &middot; musicalcats.nl</span>
+    <h1>Cats Speellijst-Check</h1>
+    <p class="steekwoorden">
+      Vergelijkt de orkestlijst, jullie reed 2-sheet en musicalcats.nl op
+      verschillen die Emiels speelbeurten raken.
+    </p>
+    <div class="meta">
+      <span>peildatum <b>{{PEILDATUM}}</b></span>
+      <span>bijgewerkt <b>{{TIJDSTIP}}</b></span>
+      <span>{{AGENDA_NOTE}}</span>
+    </div>
+  </header>
+
+  <nav class="strip" aria-label="Samenvatting per categorie">
+    <a href="#kritiek"><span class="n kritiek">{{STRIP_KRITIEK}}</span><span class="l">Kritiek</span></a>
+    <a href="#verschil"><span class="n verschil">{{STRIP_VERSCHIL}}</span><span class="l">Verschil</span></a>
+    <a href="#website"><span class="n website">{{STRIP_WEBSITE}}</span><span class="l">Website</span></a>
+    <a href="#open"><span class="n open">{{STRIP_OPEN}}</span><span class="l">Open</span></a>
+  </nav>
+
+  <main>
+    {{SECTIES}}
+  </main>
+
+  <footer>
+    <p>
+      Gegenereerd door <code>python3 -m catscheck --json</code>, een
+      deterministische controle zonder AI: dezelfde vier bronnen leveren
+      altijd hetzelfde rapport op. Er wordt nooit naar de orkestlijst of de
+      reed 2-sheet geschreven &mdash; alleen gelezen.
+    </p>
+    <p>
+      W&iacute;&eacute; speelt-verschillen tussen orkestlijst en reed
+      2-sheet zoekt Emiel eerst uit met de betrokkenen voordat er iets
+      verandert; tijd- en plaatsverschillen past hij zelf aan in de
+      orkestlijst.
+    </p>
+  </footer>
+</div>
