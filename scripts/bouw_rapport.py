@@ -52,7 +52,7 @@ def _actie(ernst, tekst):
         return "Navragen bij wie de orkestlijst invult — dit hoort Emiel, Christof, Coen of Michiel te zijn."
     if tekst.startswith("leeg type") or tekst.startswith("onbekend type"):
         return "Navragen/rechtzetten — deze voorstelling is niet meegenomen in de controle."
-    return "Zelf rechtzetten in de orkestlijst — jij hebt daar schrijfrechten."
+    return "Zelf rechtzetten in de orkestlijst."
 
 
 def _render_groep(ernst, groep):

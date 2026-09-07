@@ -74,7 +74,7 @@ class TestBouwRapport(unittest.TestCase):
         ]:
             self.assertEqual(
                 bouw_rapport._actie("VERSCHIL", tekst),
-                "Zelf rechtzetten in de orkestlijst — jij hebt daar schrijfrechten.",
+                "Zelf rechtzetten in de orkestlijst.",
             )
 
     def test_onbekende_naam_en_leeg_type_wijzen_op_navragen(self):
