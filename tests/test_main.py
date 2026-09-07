@@ -178,6 +178,31 @@ class TestAfsluitcodes(unittest.TestCase):
             inst = _lees_instellingen(pad)
         self.assertEqual(inst.mijn_naam, "emiel")
 
+    def test_negeer_agenda_titels_wordt_gelezen_en_genormaliseerd(self):
+        with tempfile.TemporaryDirectory() as map_:
+            pad = Path(map_) / "trefwoorden.json"
+            pad.write_text(
+                json.dumps({"negeer_agenda_titels": ["Repetitie", "SOUNDCHECK"]}),
+                encoding="utf-8",
+            )
+            inst = _lees_instellingen(pad)
+        self.assertEqual(inst.negeer_agenda_titels, ("repetitie", "soundcheck"))
+
+    def test_negeer_agenda_titels_als_losse_tekst_geeft_code_2(self):
+        # {"negeer_agenda_titels": "repetitie"} zou een tuple losse letters
+        # worden, waarna elke afspraak met een 'e' erin uit het rapport valt.
+        with tempfile.TemporaryDirectory() as map_:
+            kapot = Path(map_) / "trefwoorden.json"
+            kapot.write_text(
+                json.dumps({"negeer_agenda_titels": "repetitie"}), encoding="utf-8"
+            )
+            code, _, fout = draai(
+                ["--cache", FIXTURES, "--config", str(kapot), "--vanaf", "2026-09-01"]
+            )
+        self.assertEqual(code, 2)
+        self.assertIn("niet lezen", fout)
+        self.assertNotIn("Traceback", fout)
+
     def test_lege_trefwoordenlijst_geeft_code_2_in_plaats_van_stille_uitschakeling(self):
         # Een lege lijst matcht geen enkele afspraak meer, waardoor de hele
         # agendacontrole zonder signaal uitgeschakeld raakt.

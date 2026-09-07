@@ -319,6 +319,40 @@ class TestAgenda(unittest.TestCase):
         self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
         self.assertIn("geen speelbeurt", m[0].tekst.lower())
 
+    def test_repetitie_in_de_agenda_zonder_speelbeurt_wordt_niet_gemeld(self):
+        # Een repetitie is geen speelbeurt en hoort dus per definitie bij geen
+        # enkele voorstelling in de orkestlijst. Dat elke keer als KRITIEK
+        # melden leert je juist de rode meldingen negeren.
+        m = vergelijk(
+            [v("orkest", date(2026, 9, 22), "20:00", "michiel")],
+            leeg(), leeg(),
+            [AgendaItem(date(2026, 9, 22), time(10, 0), "Cats Repetitie", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+    def test_repetitie_telt_nog_wel_als_dekking_voor_een_werkdag(self):
+        # Genegeerd voor het melden van losse items, maar niet uit de
+        # koppeling gehaald: staat er een MON-dag ingeroosterd en dekt de
+        # repetitie-afspraak die, dan is er niets aan de hand.
+        m = vergelijk(
+            leeg(),
+            [v("reed2", date(2026, 9, 22), "10:00", "emiel", soort="MON")],
+            leeg(),
+            [AgendaItem(date(2026, 9, 22), time(10, 0), "Cats Repetitie", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual(m, [])
+
+    def test_gewoon_cats_item_blijft_wel_gemeld_ondanks_de_repetitiefilter(self):
+        m = vergelijk(
+            [v("orkest", date(2026, 10, 7), "20:00", "michiel")],
+            leeg(), leeg(),
+            [AgendaItem(date(2026, 10, 7), time(17, 0), "Cats Almere", "x")],
+            INST, VANAF,
+        )
+        self.assertEqual([x.ernst for x in m], [Ernst.KRITIEK])
+
     def test_agenda_item_na_het_ingevulde_deel_is_geen_kritiek(self):
         # De orkestlijst houdt op 06-10-2026 op met Reed 2-namen. Een afspraak
         # in januari zegt dus niets over of Emiel daar speelt.

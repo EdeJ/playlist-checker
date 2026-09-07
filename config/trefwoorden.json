@@ -2,5 +2,6 @@
   "mijn_naam": "emiel",
   "marge_voor_minuten": 240,
   "marge_na_minuten": 30,
-  "trefwoorden": ["cats"]
+  "trefwoorden": ["cats"],
+  "negeer_agenda_titels": ["repetitie"]
 }

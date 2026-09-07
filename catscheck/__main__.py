@@ -142,11 +142,18 @@ def _lees_instellingen(pad):
         raise ParseFout(
             f"'marge_voor_minuten' en 'marge_na_minuten' in {pad} moeten getallen zijn"
         ) from None
+    negeer = rauw.get("negeer_agenda_titels", ["repetitie"])
+    if not isinstance(negeer, list) or not all(isinstance(t, str) for t in negeer):
+        # Een tekenreeks in plaats van een lijst zou hier stilzwijgend een
+        # tuple losse letters worden, waarna elke agenda-afspraak met een
+        # 'e' erin uit het rapport verdwijnt.
+        raise ParseFout(f"'negeer_agenda_titels' in {pad} moet een lijst met tekst zijn")
     return Instellingen(
         mijn_naam=mijn_naam.lower(),
         marge_voor_minuten=marge_voor,
         marge_na_minuten=marge_na,
         trefwoorden=tuple(t.lower() for t in trefwoorden),
+        negeer_agenda_titels=tuple(t.lower() for t in negeer),
     )
 
 

@@ -28,6 +28,13 @@ class Instellingen:
     marge_voor_minuten: int = 240
     marge_na_minuten: int = 30
     trefwoorden: tuple = ("cats",)
+    # Agenda-afspraken met een van deze woorden in de titel worden nooit
+    # gemeld als "hoort bij geen speelbeurt". Een repetitie is per definitie
+    # geen voorstelling en staat dus in geen enkele bron als speelbeurt; die
+    # elke keer als KRITIEK melden leert je juist de rode meldingen negeren.
+    # Ze tellen wél gewoon mee bij het koppelen, zodat zo'n afspraak een
+    # ingeroosterde werkdag (MON, BESL) nog steeds kan afdekken.
+    negeer_agenda_titels: tuple = ("repetitie",)
 
 
 def vergelijk(orkest, reed2, website, agenda, instellingen, vanaf):
@@ -313,6 +320,8 @@ def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
                 ))
 
         for j in vrij:
+            if _is_te_negeren(items[j], inst):
+                continue
             klok = (items[j].start.strftime("%H:%M")
                     if items[j].start else "hele dag")
             if ingevuld_tot is not None and dag <= ingevuld_tot:
@@ -330,6 +339,16 @@ def _vergelijk_agenda(orkest, reed2, agenda, inst, vanaf):
                     (f"start {klok}",),
                 ))
     return meldingen
+
+
+def _is_te_negeren(item, inst):
+    """Zeg of een los agenda-item niet gemeld hoeft te worden.
+
+    Alleen van toepassing op items die aan geen enkele speelbeurt gekoppeld
+    konden worden; gekoppelde items zijn per definitie geen probleem.
+    """
+    titel = item.titel.lower()
+    return any(woord in titel for woord in inst.negeer_agenda_titels)
 
 
 def _beste_koppeling(beurten, items, inst):
