@@ -40,7 +40,22 @@ python3 -m catscheck
 Afsluitcode 0 betekent geen verschillen, 1 betekent meldingen, 2 betekent dat
 een bron niet gelezen kon worden.
 
-**Stap 3 — toelichten**
+**Stap 3 — rapportpagina openen**
+
+```bash
+./scripts/rapport.sh
+```
+
+Bouwt dezelfde bevindingen als een HTML-pagina in `cache/rapport.html` en
+opent die in de browser. Dit komt naast de terminaluitvoer van stap 2, niet
+in de plaats daarvan: de terminal blijft ongewijzigd. Een script doet dit
+bewust, en niet jij met de hand — dan ziet de pagina er elke keer hetzelfde
+uit, net als het rapport zelf.
+
+Bestaat `xdg-open` niet (SSH-sessie zonder desktop), dan print het script
+alleen het pad; dat is geen fout.
+
+**Stap 4 — toelichten**
 
 Druk het rapport af en licht de KRITIEK-meldingen toe. Zeg er per melding bij
 wat Emiel eraan kan doen:
