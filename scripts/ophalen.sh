@@ -20,8 +20,15 @@ trap 'rm -rf "$werkmap"' EXIT
 
 mislukt=0
 
+# Curl's eigen useragent ("curl/8.x") wordt door sommige bot-filters
+# geblokkeerd (403), ook al is de opgevraagde pagina gewoon openbaar. Een
+# gewone browser-useragent is hier geen misleiding — het is dezelfde
+# publieke inhoud die iedereen met een browser ook te zien krijgt — maar
+# voorkomt dat dat filter dichtklapt.
+useragent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+
 echo "musicalcats.nl ophalen..."
-if curl -sSL --fail --max-time 30 "https://musicalcats.nl/waar-wanneer/" \
+if curl -sSL --fail --max-time 30 -A "$useragent" "https://musicalcats.nl/waar-wanneer/" \
         -o "$werkmap/website.html" \
    && grep -q 'class="date"' "$werkmap/website.html"; then
   mv "$werkmap/website.html" cache/website.html
@@ -38,7 +45,7 @@ orkest_id="1qXIFu7Wq9SBKrBxjPqoTOqCccH65fpcg"
 reed2_id="1jOjspqJjxHZdwBPgiBsyDMsyw_gy0caEHucaV5eP1rI"
 
 echo "orkestlijst ophalen..."
-if curl -sSL --fail --max-time 60 \
+if curl -sSL --fail --max-time 60 -A "$useragent" \
         "https://drive.google.com/uc?export=download&id=${orkest_id}" \
         -o "$werkmap/orkest.xlsx" \
    && python3 -c 'import sys, zipfile; sys.exit(0 if zipfile.is_zipfile(sys.argv[1]) else 1)' \
@@ -60,7 +67,7 @@ echo "reed 2-sheet ophalen..."
 # een halve sheet stilzwijgend het venster en verdwijnt elke melding
 # daarachter. Daarom ook de laatste regel toetsen: die moet evenveel velden
 # hebben als de kopregel.
-if curl -sSL --fail --max-time 30 \
+if curl -sSL --fail --max-time 30 -A "$useragent" \
         "https://docs.google.com/spreadsheets/d/${reed2_id}/export?format=csv" \
         -o "$werkmap/reed2.csv" \
    && head -1 "$werkmap/reed2.csv" | grep -q '^Speeldatum,Type' \
@@ -84,7 +91,7 @@ if [[ -f config/ical_url.txt ]]; then
   # De URL wordt via stdin aan curl gevoerd (-K -) in plaats van als
   # argument: een argument staat in de procestabel (ps, /proc/*/cmdline) en
   # is daarmee tijdens het ophalen voor iedereen op deze machine leesbaar.
-  if printf 'url = "%s"\n' "$url" | curl -sSL --max-time 60 -K - -o "$werkmap/agenda.ics" \
+  if printf 'url = "%s"\n' "$url" | curl -sSL --max-time 60 -A "$useragent" -K - -o "$werkmap/agenda.ics" \
      && head -1 "$werkmap/agenda.ics" | grep -q "BEGIN:VCALENDAR" \
      && tail -5 "$werkmap/agenda.ics" | grep -q "END:VCALENDAR"; then
     mv "$werkmap/agenda.ics" cache/agenda.ics
