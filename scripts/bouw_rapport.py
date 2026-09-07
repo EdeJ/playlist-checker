@@ -109,13 +109,16 @@ def bouw(data, bijgewerkt_tekst):
 
 
 def main(argv):
-    if len(argv) != 3:
+    if len(argv) not in (3, 4):
         print(f"gebruik: {argv[0]} <json-pad|-> <output-html-pad> [bijgewerkt-tekst]", file=sys.stderr)
         return 2
     json_pad, uit_pad = argv[1], argv[2]
     ruw = sys.stdin.read() if json_pad == "-" else Path(json_pad).read_text(encoding="utf-8")
     data = json.loads(ruw)
-    bijgewerkt = datetime_now_tekst()
+    # Zonder expliciete tekst gebruikt de aanroeper zijn eigen lokale klok
+    # (datetime.now() zonder tijdzone), wat in een cloud-omgeving UTC kan
+    # zijn — geef daarom liever expliciet een al-omgezette lokale tijd mee.
+    bijgewerkt = argv[3] if len(argv) == 4 else datetime_now_tekst()
     html_tekst, tellingen = bouw(data, bijgewerkt)
     Path(uit_pad).write_text(html_tekst, encoding="utf-8")
     print(json.dumps(tellingen))

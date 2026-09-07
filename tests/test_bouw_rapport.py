@@ -5,8 +5,10 @@ onderdeel van de controle zelf, alleen van de rapportpagina), dus wordt het
 via het bestandspad geïmporteerd.
 """
 import importlib.util
+import json
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -63,6 +65,21 @@ class TestBouwRapport(unittest.TestCase):
         html_tekst, _ = bouw_rapport.bouw({"peildatum": "2026-09-07", "meldingen": meldingen}, "x")
         self.assertNotIn("<script>alert(1)</script>", html_tekst)
         self.assertIn("&lt;script&gt;", html_tekst)
+
+    def test_hoofdfunctie_gebruikt_een_meegegeven_bijgewerkt_tekst(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump({"peildatum": "2026-09-07", "meldingen": []}, f)
+            json_pad = f.name
+        uit_pad = json_pad.replace(".json", ".html")
+        try:
+            code = bouw_rapport.main(
+                ["bouw_rapport.py", json_pad, uit_pad, "07-09-2026, 08:03 (lokale tijd)"]
+            )
+            self.assertEqual(code, 0)
+            self.assertIn("08:03 (lokale tijd)", Path(uit_pad).read_text(encoding="utf-8"))
+        finally:
+            Path(json_pad).unlink(missing_ok=True)
+            Path(uit_pad).unlink(missing_ok=True)
 
     def test_alle_placeholders_worden_vervangen(self):
         meldingen = [m("KRITIEK", "2026-09-10", "iets")]
