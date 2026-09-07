@@ -59,3 +59,26 @@ rapportpagina bevat die ook, en hoort dus niet in git.
 `scripts/bouw_rapport.py` heeft al tests (`tests/test_bouw_rapport.py`).
 `scripts/rapport.sh` is een dunne schil zonder eigen logica en wordt, net als
 `scripts/ophalen.sh`, niet apart getest.
+
+## Nabewerking 07-09-2026: geen samenvattingen meer, actie per melding
+
+Eerste versie hergebruikte de samenvattingslogica van het terminalrapport
+("9x aanvangstijd verschilt: orkestlijst 15:00, jullie sheet 14:30"). Op een
+pagina is dat onbruikbaar: Emiel kan er niet mee bepalen óm welke
+voorstelling het gaat. Aangepast:
+
+- `bouw_rapport.py` vat nooit meer samen — elke melding krijgt een eigen
+  regel, ook bij veel herhaling. Dat mag: de terminal blijft de plek voor de
+  compacte samenvatting, de pagina is nu juist de plek voor de volledige
+  lijst.
+- Elke melding krijgt een `.actie`-regel met wat Emiel ermee kan, gekleurd
+  per categorie. De classificatie (`_actie()` in `bouw_rapport.py`) matcht op
+  de letterlijke Nederlandse formuleringen uit `catscheck/vergelijk.py` en
+  volgt exact de indeling die al in `.claude/skills/cats-check/SKILL.md`
+  stond: agenda-meldingen → zelf bijwerken, tijd/type/plaats/aantal →
+  zelf rechtzetten in de orkestlijst, "Reed 2 verschilt" (wíé speelt) →
+  eerst uitzoeken, onbekende/lege types → navragen. WEBSITE is altijd
+  ter info, OPEN is altijd "nog niet ingevuld".
+- Omdat de actie afhangt van de tekst en niet alleen van de ernst-categorie
+  (VERSCHIL bevat zowel "zelf rechtzetten" als "eerst uitzoeken"-gevallen),
+  zit de classificatie per melding, niet als één inleidende zin per sectie.

@@ -210,28 +210,16 @@
     color: var(--ink-soft);
     margin-top: 0.15rem;
   }
-
-  .groep-samengevat {
-    font-size: 0.86rem;
-    color: var(--ink-soft);
-    margin: 0 0 0.6rem;
+  .actie {
+    grid-column: 2;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 0.3rem;
   }
-  .sum-list { list-style: none; margin: 0; padding: 0; }
-  .sum-row {
-    display: grid;
-    grid-template-columns: 3rem 1fr;
-    gap: 0.6rem;
-    padding: 0.4rem 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.9rem;
-  }
-  .sum-row:last-child { border-bottom: none; }
-  .sum-n {
-    font-family: "IBM Plex Mono", monospace;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--ink);
-  }
+  .sectie-kritiek .actie { color: var(--kritiek); }
+  .sectie-verschil .actie { color: var(--verschil); }
+  .sectie-website .actie { color: var(--website); }
+  .sectie-open .actie { color: var(--open); }
 
   .alles-goed {
     padding: 2.5rem 0;

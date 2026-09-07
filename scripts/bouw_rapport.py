@@ -3,19 +3,20 @@
 
     python3 -m catscheck --zonder-agenda --json | python3 scripts/bouw_rapport.py - rapport.html
 
-Vult scripts/rapport_sjabloon.html met de bevindingen. Groepeert lange,
-herhalende groepen net als catscheck/rapport.py._herhaalt_zich — dat is
-bewust dubbel: dit script bouwt de webpagina, rapport.py de terminaltekst,
-en beide moeten onafhankelijk van elkaar leesbaar blijven.
+Vult scripts/rapport_sjabloon.html met de bevindingen. Vat, anders dan
+catscheck/rapport.py (de terminaltekst), nooit samen: "9x aanvangstijd
+verschilt: orkestlijst 15:00, jullie sheet 14:30" is compact maar onbruikbaar
+op een pagina waar je juist wilt zien óm welke voorstellingen het gaat. Elke
+melding krijgt in plaats daarvan een eigen regel mét een actie-aanwijzing,
+zodat de pagina hetzelfde zegt als de toelichting die de checker anders elke
+keer opnieuw met de hand zou moeten formuleren.
 """
 import html
 import json
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
-
-SAMENVATTEN_VANAF = 15
 
 ERNST_VOLGORDE = ["KRITIEK", "VERSCHIL", "WEBSITE", "OPEN"]
 ERNST_INFO = {
@@ -28,31 +29,38 @@ ERNST_INFO = {
 SJABLOON = Path(__file__).parent / "rapport_sjabloon.html"
 
 
-def _herhaalt_zich(groep):
-    return len({m["tekst"] for m in groep}) * 2 <= len(groep)
-
-
 def _fmt_datum(iso):
     return date.fromisoformat(iso).strftime("%d-%m-%Y")
 
 
+# Elke actietekst hier komt direct uit .claude/skills/cats-check/SKILL.md
+# ("Stap 4 — toelichten"): agenda zelf bijwerken, tijd/plaats/type zelf
+# rechtzetten in de orkestlijst (Emiel heeft daar schrijfrechten), en
+# verschillen over wíé speelt eerst uitzoeken in plaats van aanpassen. Deze
+# functie herkent welke van de drie van toepassing is aan de letterlijke
+# formuleringen die catscheck/vergelijk.py produceert.
+def _actie(ernst, tekst):
+    if ernst == "WEBSITE":
+        return "Ter info — musicalcats.nl is niet de bron, geen actie nodig."
+    if ernst == "OPEN":
+        return "Nog niet ingevuld — geen actie voor jou, gewoon nog open."
+    if tekst.startswith("Reed 2 verschilt"):
+        return "Eerst uitzoeken met de betrokkenen — niet zomaar aanpassen."
+    if "agenda-item" in tekst or tekst.startswith("jij staat ingeroosterd"):
+        return "Zelf je agenda bijwerken."
+    if tekst.startswith("onbekende naam bij Reed 2"):
+        return "Navragen bij wie de orkestlijst invult — dit hoort Emiel, Christof, Coen of Michiel te zijn."
+    if tekst.startswith("leeg type") or tekst.startswith("onbekend type"):
+        return "Navragen/rechtzetten — deze voorstelling is niet meegenomen in de controle."
+    return "Zelf rechtzetten in de orkestlijst — jij hebt daar schrijfrechten."
+
+
 def _render_groep(ernst, groep):
-    mag_samenvatten = ernst != "KRITIEK"
-    if mag_samenvatten and len(groep) > SAMENVATTEN_VANAF and _herhaalt_zich(groep):
-        eerste, laatste = _fmt_datum(groep[0]["datum"]), _fmt_datum(groep[-1]["datum"])
-        rijen = "".join(
-            f'<li class="sum-row"><span class="sum-n">{aantal}&times;</span>'
-            f'<span class="sum-t">{html.escape(tekst)}</span></li>'
-            for tekst, aantal in Counter(m["tekst"] for m in groep).most_common()
-        )
-        return (
-            f'<p class="groep-samengevat">{len(groep)} meldingen, van {eerste} '
-            f'tot en met {laatste}:</p><ul class="sum-list">{rijen}</ul>'
-        )
     items = "".join(
         f'<li class="melding"><span class="datum">{_fmt_datum(m["datum"])}</span>'
         f'<span class="tekst">{html.escape(m["tekst"])}</span>'
         + "".join(f'<div class="detail">{html.escape(d)}</div>' for d in m["details"])
+        + f'<div class="actie">&rarr; {html.escape(_actie(ernst, m["tekst"]))}</div>'
         + "</li>"
         for m in groep
     )
